@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Lungs Recorder Sheet</title>
+<style>
+  :root { --ink: #16213A; --rule: #9AA4B5; --bg: #FFFFFF; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #E8ECF3; --rule: #5A6578; --bg: #10151F; } }
+  :root[data-theme="dark"] { --ink: #E8ECF3; --rule: #5A6578; --bg: #10151F; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font-family: 'Atkinson Hyperlegible Next', system-ui, sans-serif; font-size: 13px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 16px 0 6px; }
+  p { margin: 0 0 8px; max-width: 70ch; }
+  table { border-collapse: collapse; width: 100%; max-width: 900px; }
+  th, td { border: 1px solid var(--rule); padding: 6px; text-align: left; height: 26px; }
+  th { font-weight: 700; }
+  .head td { border: 0; border-bottom: 1px solid var(--rule); width: 25%; }
+  .print { margin: 8px 0 12px; padding: 8px 14px; font: inherit; font-weight: 700; border-radius: 8px; border: 1px solid var(--rule); background: var(--bg); color: var(--ink); cursor: pointer; }
+  @media print { .print { display: none; } body { padding: 0; } @page { margin: 12mm; } }
+</style>
+</head>
+<body>
+<h1>Little Lungs recorder sheet</h1>
+<p>One sheet per student. Write what you see, not what the screen says. The page code (P07, P15) shows in the corner of the tablet. Later, type these into the app under Review.</p>
+<button class="print" onclick="window.print()">Print this sheet</button>
+<table class="head"><tr><td>Student code:</td><td>Grade:</td><td>Date:</td><td>Recorder:</td></tr></table>
+
+<h2>Task 1 placements (P07). Write the organ asked, then tick what really happened</h2>
+<table>
+  <tr><th>Piece</th><th>Organ asked</th><th>First try: correct / wrong / nothing placed</th><th>After hint: correct / wrong / nothing placed</th></tr>
+  <tr><td>1</td><td></td><td></td><td></td></tr>
+  <tr><td>2</td><td></td><td></td><td></td></tr>
+  <tr><td>3</td><td></td><td></td><td></td></tr>
+  <tr><td>4</td><td></td><td></td><td></td></tr>
+  <tr><td>5</td><td></td><td></td><td></td></tr>
+</table>
+
+<h2>Full build (P09), only if it runs. Correct (C) or wrong (W) per piece</h2>
+<table>
+  <tr><th>Heart</th><th>Windpipe</th><th>Diaphragm</th><th>Right lung</th><th>Left lung</th></tr>
+  <tr><td></td><td></td><td></td><td></td><td></td></tr>
+</table>
+
+<h2>Task 2 breaths (P15). Write the command heard, then D (diaphragmatic), T (thoracic) or U (unclear) per breath</h2>
+<p>A trial can have up to 6 breaths if the app asks for extra ones. A retry is a second row for the same trial.</p>
+<table>
+  <tr><th>Trial</th><th>Command (D or T)</th><th>Try</th><th>Breath 1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr>
+  <tr><td>1</td><td></td><td>First</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>1</td><td></td><td>Retry</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>2</td><td></td><td>First</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>2</td><td></td><td>Retry</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+</table>
+
+<h2>Heart rate reference (P13)</h2>
+<table>
+  <tr><th>Pulse oximeter reading at the end of the 30-second calibration (beats per minute)</th><th>Notes or problems</th></tr>
+  <tr><td style="height:40px"></td><td></td></tr>
+</table>
+</body>
+</html>
