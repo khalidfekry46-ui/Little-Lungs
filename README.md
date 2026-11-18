@@ -104,6 +104,8 @@ It compares reading, breathing (Task 2), graph questions and total between group
 | `js/test.js` | The test pages P01 to P22 |
 | `js/pico.js` | Pico simulator and live Pico connection |
 | `js/vision.js` | Camera simulator, live camera, and the judging rules |
+| `js/aruco.js` | Finds the 4 ArUco board markers, straightens the board, cuts out the 5 zones; board layout in cm (`S.BOARD`) |
+| `js/board.js` | Management > Board check |
 | `js/passages.js` | The 15 test passages and 6 Prep passages |
 | `js/reading.js` | The reading section: adaptive levels, timer, question panel |
 | `js/prep.js` | The Prep tab |

@@ -40,7 +40,7 @@ S.admin = (() => {
 
   /* Management pages share a second row of tabs */
   function frame(title, content, active) {
-    const nav = [['overview', 'Overview', overview], ['review', 'Review', reviewList], ['stats', 'Statistics', stats], ['photos', 'Board photos', photos], ['settings', 'Settings', settings]];
+    const nav = [['overview', 'Overview', overview], ['review', 'Review', reviewList], ['stats', 'Statistics', stats], ['photos', 'Board photos', photos], ['boardcheck', 'Board check', boardCheckPage], ['settings', 'Settings', settings]];
     const st = S.settings.get();
     const modes = [st.picoMode === 'sim' ? 'Pico: simulator' : 'Pico: live', st.visionMode === 'sim' ? 'Camera AI: simulator' : 'Camera AI: live'];
     return mainFrame('manage', h('div', null,
@@ -189,6 +189,8 @@ S.admin = (() => {
         h('p', null, 'Parts without hardware are simulated, so you can rehearse the whole test now. Sessions run in this mode are marked simulated and are left out of statistics. Switch each part to live in Settings when the Pico and the trained model are ready.')) : null);
     frame('Overview', content, 'overview');
   }
+
+  function boardCheckPage() { frame('Board check', S.boardCheck.view(), 'boardcheck'); }
 
   /* ---------- Station self-check ---------- */
   async function stationCheck() {
