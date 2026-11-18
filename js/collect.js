@@ -97,6 +97,18 @@ S.collect = (() => {
     { text: 'Slide the diaphragm to the right so one end sticks well out of its box.', set: { diaphragm: 'partial' } },
     { text: 'Put the heart low, half in the heart box and half on the diaphragm.', set: { heart: 'partial', diaphragm: 'partial' } }
   ];
+  /* Decoy magnets: the 5 round magnet pairs that are NOT a correct spot. A piece snapped onto one sits several cm off,
+     so its zone shows a Partial piece (and the zone it pushes into shows two pieces = Partial). */
+  const DECOYS = [
+    { text: 'Put the windpipe on the TOP round magnet pair (up in the neck) instead of its star magnets.', set: { windpipe: 'partial' } },
+    { text: 'Put the right lung on the UPPER-LEFT round magnet pair instead of its diamond magnet. If it covers the top-left marker, move it until the marker is fully visible and tell your teammate.', set: { rlung: 'partial' } },
+    { text: 'Put the heart on the MIDDLE round magnet pair (between the lungs) instead of its lower star magnets.', set: { heart: 'partial', windpipe: 'partial' } },
+    { text: 'Put the left lung on the RIGHT round magnet pair (below its diamond) instead of its diamond magnet.', set: { llung: 'partial', diaphragm: 'partial' } },
+    { text: 'Put the diaphragm on the BOTTOM-RIGHT round magnet pair instead of its round magnets in the middle. Keep it off the bottom-right marker.', set: { diaphragm: 'partial' } },
+    { text: 'Put the left lung on the MIDDLE round magnet pair (between the lungs), and take the heart off the board.', set: { llung: 'partial', heart: 'partial', windpipe: 'partial' } },
+    { text: 'Put the heart on the RIGHT round magnet pair (below the left lung\u2019s diamond).', set: { heart: 'partial', llung: 'partial' } }
+  ];
+  const decoyShot = d => ({ kind: 'partial', decoy: true, text: d.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), d.set), check: ZONES.slice() });
   const HAND_PAIRS = [['rlung', 'heart'], ['heart', 'llung'], ['windpipe', 'heart'], ['rlung', 'diaphragm'], ['llung', 'diaphragm'], ['windpipe', 'rlung'], ['windpipe', 'llung'], ['heart', 'diaphragm']];
   const handShot = (pair, how) => ({ kind: 'hand', text: `${how} over the ${pair.map(ZN).join(' and ')} boxes, all pieces in place. Use a different hand or sleeve each time. Mark every zone the hand or sleeve covers as Hand.`, labels: Object.assign(allCorrect(), Object.fromEntries(pair.map(z => [z, 'hand']))), check: ZONES.slice() });
   const HOWS = ['Hold a hand flat', 'Hold a hand as if about to place a piece', 'Rest your fingertips', 'Hold a hand with a sleeve'];
@@ -176,7 +188,8 @@ S.collect = (() => {
     if (type === 'focus') {
       for (let i = 0; i < 6; i++) shots.push(twoHands(r));
       pickN(r, HAND_PAIRS, 6).forEach((pr, i) => shots.push(handShot(pr, HOWS[i % HOWS.length])));
-      for (let i = 0; i < 13; i++) shots.push(partialCombo(r));
+      for (let i = 0; i < 8; i++) shots.push(partialCombo(r));
+      pickN(r, DECOYS, 5).forEach(d => shots.push(decoyShot(d)));
       return done();
     }
     if (type === 'tricks') {
@@ -202,11 +215,11 @@ S.collect = (() => {
       { text: 'Put the heart in the left lung’s place, and take the left lung off the board.', set: { llung: 'heart', heart: 'empty' } },
       { text: 'Put the windpipe in the left lung’s place, and take the left lung off the board.', set: { llung: 'trachea', windpipe: 'empty' }, check: ['llung'] }
     ];
-    pickN(r, wrong, 4).forEach(w => shots.push({ kind: 'wrong', text: w.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), w.set), check: w.check || [] }));
+    pickN(r, wrong, 3).forEach(w => shots.push({ kind: 'wrong', text: w.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), w.set), check: w.check || [] }));
     pickN(r, FLIPS, 2).forEach(x => shots.push(trickShot('flipped', x)));
     pickN(r, UPSIDES, 1).forEach(x => shots.push(trickShot('upside_down', x)));
     for (let i = 0; i < 4; i++) shots.push(trickCombo(r));
-    shots.push(partialShot(pickN(r, PARTIALS, 1)[0]));
+    pickN(r, DECOYS, 2).forEach(d => shots.push(decoyShot(d)));
     for (let i = 0; i < 2; i++) shots.push(partialCombo(r));
     shots.push(twoHands(r));
     shots.push(handShot(pickN(r, HAND_PAIRS, 1)[0], HOWS[0]));
