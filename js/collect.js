@@ -44,8 +44,8 @@ S.collect = (() => {
   const { h } = S.util;
 
   /* The 8 categories the AI learns (see the training plan) */
-  const CATS = ['empty', 'right_lung', 'left_lung', 'heart', 'trachea', 'diaphragm', 'partial', 'hand'];
-  const CAT_NAME = { empty: 'Empty', right_lung: 'Right lung', left_lung: 'Left lung', heart: 'Heart', trachea: 'Windpipe', diaphragm: 'Diaphragm', partial: 'Partial / overlap', hand: 'Hand' };
+  const CATS = ['empty', 'right_lung', 'left_lung', 'heart', 'trachea', 'diaphragm', 'flipped', 'upside_down', 'partial', 'hand'];
+  const CAT_NAME = { empty: 'Empty', right_lung: 'Right lung', left_lung: 'Left lung', heart: 'Heart', trachea: 'Windpipe', diaphragm: 'Diaphragm', flipped: 'Flipped (back side up)', upside_down: 'Upside down', partial: 'Partial / overlap', hand: 'Hand' };
   const PIECE_CAT = { rlung: 'right_lung', llung: 'left_lung', heart: 'heart', windpipe: 'trachea', diaphragm: 'diaphragm' };
   const ZONES = ['rlung', 'windpipe', 'heart', 'llung', 'diaphragm'];
   const ZN = k => S.ORGAN_NAME[k] || k;
@@ -59,7 +59,7 @@ S.collect = (() => {
   const allCorrect = () => Object.fromEntries(ZONES.map(z => [z, PIECE_CAT[z]]));
 
   /* What to change in each session, so the photos differ (lighting, camera position, room, hands).
-     type: 'standard' (all kinds of photos) or 'focus' (only hands and overlaps, the two rarest categories). */
+     type: 'standard' (all kinds of photos), 'focus' (only hands and overlaps) or 'tricks' (only flipped and upside-down pieces). */
   const SCHEDULE = {
     1: { type: 'standard', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Ceiling lights on. Phone at a normal height, straight above the board.' },
     2: { type: 'standard', lighting: 'Ceiling lights', camera: 'A little higher', tip: 'Ceiling lights on. Hold the phone about 10 cm higher than last time.' },
@@ -75,14 +75,15 @@ S.collect = (() => {
     12: { type: 'standard', lighting: 'Daylight from a window', camera: 'Normal height', tip: 'Daylight if you can (otherwise any new light). Use hands and sleeves you have not used before.' },
     13: { type: 'standard', lighting: 'Daylight from a window', camera: 'On the holder', tip: 'VALIDATION. Another day, daylight, tablet on the holder.' },
     14: { type: 'standard', lighting: 'Ceiling lights', camera: 'On the holder', tip: 'VALIDATION. Ceiling lights, tablet on the holder, new hands.' },
-    15: { type: 'focus', lighting: 'Desk lamp from the left', camera: 'On the holder', tip: 'VALIDATION (hands and overlaps). Lamp from one side, tablet on the holder.' },
+    15: { type: 'standard', lighting: 'Desk lamp from the left', camera: 'On the holder', tip: 'VALIDATION. Lamp from one side, tablet on the holder.' },
     16: { type: 'standard', lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. The real station: MatePad on the holder, in the room where students will be tested. Use this session only once.' },
     17: { type: 'focus', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'EXTRA TRAINING: hands and overlaps. Ceiling lights, normal height.' },
-    18: { type: 'focus', lighting: 'Desk lamp from the right', camera: 'Tilted a little', tip: 'EXTRA TRAINING: hands and overlaps. Lamp from the right, phone tilted.' },
+    18: { type: 'tricks', lighting: 'Desk lamp from the right', camera: 'Tilted a little', tip: 'EXTRA TRAINING: flipped and upside-down pieces. Lamp from the right, phone tilted.' },
     19: { type: 'standard', lighting: 'Daylight from a window', camera: 'A little higher', tip: 'EXTRA TRAINING. Daylight, a little higher, new hands.' },
-    20: { type: 'focus', lighting: 'Dim room', camera: 'A little lower', tip: 'EXTRA TRAINING: hands and overlaps. Dim room, a little lower.' }
+    20: { type: 'focus', lighting: 'Dim room', camera: 'A little lower', tip: 'EXTRA TRAINING: hands and overlaps. Dim room, a little lower.' },
+    21: { type: 'tricks', lighting: 'Ceiling lights', camera: 'A little higher', tip: 'EXTRA TRAINING: flipped and upside-down pieces. Ceiling lights, a little higher.' }
   };
-  const schedule = n => SCHEDULE[n] || { type: n % 2 ? 'standard' : 'focus', lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick lighting and a camera position you have used least so far.' };
+  const schedule = n => SCHEDULE[n] || { type: ['standard', 'focus', 'tricks'][n % 3], lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick lighting and a camera position you have used least so far.' };
 
   const PARTIALS = [
     { text: 'Slide the heart halfway into the left lung’s box (it may lie on the lung’s edge).', set: { heart: 'partial', llung: 'partial' } },
@@ -101,25 +102,93 @@ S.collect = (() => {
   const HOWS = ['Hold a hand flat', 'Hold a hand as if about to place a piece', 'Rest your fingertips', 'Hold a hand with a sleeve'];
   const partialShot = p => ({ kind: 'partial', text: p.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), p.set), check: ZONES.slice() });
 
+  /* Flipped = back side up (lungs and heart; flipping the diaphragm is allowed, the windpipe cannot flip).
+     Upside down = turned round so its top points down (any piece). Both are wrong placements. */
+  const FLIPS = [
+    { text: 'Flip the RIGHT lung over (back side up) in its own place.', set: { rlung: 'flipped' } },
+    { text: 'Flip the LEFT lung over (back side up) in its own place.', set: { llung: 'flipped' } },
+    { text: 'Flip the heart over (back side up) in its own place.', set: { heart: 'flipped' } },
+    { text: 'Flip BOTH lungs over (back side up), each in its own place.', set: { rlung: 'flipped', llung: 'flipped' } },
+    { text: 'Flip the right lung over and put it in the LEFT lung’s place; take the left lung off the board.', set: { llung: 'flipped', rlung: 'empty' } },
+    { text: 'Flip the left lung over and put it in the RIGHT lung’s place; take the right lung off the board.', set: { rlung: 'flipped', llung: 'empty' } },
+    { text: 'Flip the heart and both lungs over (back side up), each in its own place.', set: { heart: 'flipped', rlung: 'flipped', llung: 'flipped' } },
+    { text: 'Swap the lungs AND flip both over (back side up).', set: { rlung: 'flipped', llung: 'flipped' } }
+  ];
+  const UPSIDES = [
+    { text: 'Turn the diaphragm upside down: curve facing up, the ^^^ shape facing down.', set: { diaphragm: 'upside_down' } },
+    { text: 'Flip the diaphragm over AND turn it upside down (curve up, ^^^ down).', set: { diaphragm: 'upside_down' } },
+    { text: 'Turn the windpipe upside down (its wide end at the top).', set: { windpipe: 'upside_down' } },
+    { text: 'Turn the heart upside down in its own place.', set: { heart: 'upside_down' } },
+    { text: 'Turn the right lung upside down (narrow tip at the bottom), as far inside its box as it fits.', set: { rlung: 'upside_down' }, check: ['rlung', 'heart', 'diaphragm'] },
+    { text: 'Turn the left lung upside down (narrow tip at the bottom), as far inside its box as it fits.', set: { llung: 'upside_down' }, check: ['llung', 'heart', 'diaphragm'] },
+    { text: 'Turn BOTH the windpipe and the diaphragm upside down.', set: { windpipe: 'upside_down', diaphragm: 'upside_down' } },
+    { text: 'Flip the heart over AND turn it upside down.', set: { heart: 'flipped' } }
+  ];
+  const trickShot = (kind, x) => ({ kind, text: x.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), x.set), check: x.check || [] });
+
+  /* A mixed "tricks" photo: several pieces flipped or upside down at once, so every photo gives many examples */
+  const TRICK_OPTS = {
+    rlung: [['ok', 'in place, front side up'], ['flipped', 'FLIP it over (back side up)'], ['upside_down', 'turn it UPSIDE DOWN (front side up)'], ['flipped', 'flip it over AND turn it upside down']],
+    llung: [['ok', 'in place, front side up'], ['flipped', 'FLIP it over (back side up)'], ['upside_down', 'turn it UPSIDE DOWN (front side up)'], ['flipped', 'flip it over AND turn it upside down']],
+    heart: [['ok', 'in place, front side up'], ['flipped', 'FLIP it over (back side up)'], ['upside_down', 'turn it UPSIDE DOWN (front side up)'], ['flipped', 'flip it over AND turn it upside down']],
+    windpipe: [['ok', 'in place'], ['upside_down', 'turn it UPSIDE DOWN (wide end at the top)']],
+    diaphragm: [['ok', 'in place'], ['ok', 'OTHER side up, still the right way round (counts as correct)'], ['upside_down', 'turn it UPSIDE DOWN (curve up, ^^^ down)'], ['upside_down', 'other side up AND upside down']]
+  };
+  function trickCombo(r) {
+    for (;;) {
+      const pick = Object.fromEntries(ZONES.map(z => { const o = TRICK_OPTS[z]; return [z, o[Math.floor(r() * o.length)]]; }));
+      const tricks = ZONES.filter(z => pick[z][0] !== 'ok');
+      if (tricks.length < 3) continue;
+      const labels = Object.fromEntries(ZONES.map(z => [z, pick[z][0] === 'ok' ? PIECE_CAT[z] : pick[z][0]]));
+      const kind = tricks.some(z => pick[z][0] === 'flipped') ? 'flipped' : 'upside_down';
+      const lungUp = ['rlung', 'llung'].filter(z => pick[z][0] === 'upside_down');
+      return { kind, text: 'Each piece in its own place. ' + ZONES.map(z => `${ZN(z)}: ${pick[z][1]}.`).join(' '), labels, check: lungUp.length ? lungUp.concat(['heart', 'diaphragm']) : [] };
+    }
+  }
+  /* Two overlaps at once in different parts of the board */
+  function partialCombo(r) {
+    for (;;) {
+      const [a, b] = pickN(r, PARTIALS, 2);
+      const za = Object.keys(a.set), zb = Object.keys(b.set);
+      if (za.some(z => zb.includes(z))) continue;
+      if (/heart off/.test(a.text + b.text)) continue;
+      return { kind: 'partial', text: `${a.text.replace(/\.$/, '')}, AND ${b.text.charAt(0).toLowerCase() + b.text.slice(1)} Everything else in its correct place.`, labels: Object.assign(allCorrect(), a.set, b.set), check: ZONES.slice() };
+    }
+  }
+  /* Two hands at once, each over two neighbouring zones */
+  function twoHands(r) {
+    for (;;) {
+      const [a, b] = pickN(r, HAND_PAIRS, 2);
+      if (a.some(z => b.includes(z))) continue;
+      const zs = a.concat(b);
+      return { kind: 'hand', text: `Two hands at once (one person or two): one hand over the ${a.map(ZN).join(' and ')} boxes, the other over the ${b.map(ZN).join(' and ')} boxes. All pieces in place. Mark every zone a hand or sleeve covers as Hand.`, labels: Object.assign(allCorrect(), Object.fromEntries(zs.map(z => [z, 'hand']))), check: ZONES.slice() };
+    }
+  }
+
   /* The 25-shot plan for a session.
-     Standard: 6 correct, 4 with empty zones, 5 wrong, 5 partial, 5 hand.
-     Focus: 12 hand, 13 partial (hands and overlaps are the rarest categories). */
+     Standard: 5 correct (2 with the diaphragm's other side up), 3 empty, 4 wrong, 7 flipped or upside down, 3 partial, 3 hand.
+     Focus: 12 hand, 13 partial. Tricks: 25 mixed flipped and upside-down photos. */
   function plan(session) {
     const r = rng(session * 7919 + 17);
     const type = schedule(session).type;
     const shots = [];
+    const done = () => shots.map((s, i) => Object.assign(s, { n: i + 1 }));
     if (type === 'focus') {
-      pickN(r, HAND_PAIRS, 8).forEach((pr, i) => shots.push(handShot(pr, HOWS[i % HOWS.length])));
-      pickN(r, ZONES, 4).forEach((z, i) => shots.push(handShot([z], HOWS[(i + 1) % HOWS.length])));
-      const ps = pickN(r, PARTIALS, PARTIALS.length);
-      for (let i = 0; i < 13; i++) shots.push(partialShot(ps[i % ps.length]));
-      return shots.map((s, i) => Object.assign(s, { n: i + 1 }));
+      for (let i = 0; i < 6; i++) shots.push(twoHands(r));
+      pickN(r, HAND_PAIRS, 6).forEach((pr, i) => shots.push(handShot(pr, HOWS[i % HOWS.length])));
+      for (let i = 0; i < 13; i++) shots.push(partialCombo(r));
+      return done();
+    }
+    if (type === 'tricks') {
+      for (let i = 0; i < 25; i++) shots.push(trickCombo(r));
+      return done();
     }
     const moves = pickN(r, ['exactly in place', 'all shifted a little to the left', 'all shifted a little to the right', 'all shifted a little up', 'all shifted a little down',
-      'each turned slightly clockwise', 'each turned slightly anticlockwise', 'placed a bit carelessly, each one slightly off'], 6);
+      'each turned slightly clockwise', 'each turned slightly anticlockwise', 'placed a bit carelessly, each one slightly off'], 3);
     moves.forEach(m => shots.push({ kind: 'correct', text: `All 5 pieces in their correct places, ${m}. Keep every piece inside its box.`, labels: allCorrect(), check: [] }));
-    for (let i = 0; i < 3; i++) {
-      const gone = pickN(r, ZONES, 1 + i);
+    ['exactly in place', 'each placed slightly off'].forEach(m => shots.push({ kind: 'correct', text: `All 5 pieces correct, ${m}, but with the diaphragm’s OTHER side up (still curve down, ^^^ up). This counts as correct.`, labels: allCorrect(), check: [] }));
+    for (let i = 0; i < 2; i++) {
+      const gone = pickN(r, ZONES, 1 + i * 2);
       const labels = allCorrect(); gone.forEach(z => { labels[z] = 'empty'; });
       shots.push({ kind: 'empty', text: `Take these off the board: ${gone.map(ZN).join(', ')}. Everything else in its correct place.`, labels, check: [] });
     }
@@ -133,11 +202,16 @@ S.collect = (() => {
       { text: 'Put the heart in the left lung’s place, and take the left lung off the board.', set: { llung: 'heart', heart: 'empty' } },
       { text: 'Put the windpipe in the left lung’s place, and take the left lung off the board.', set: { llung: 'trachea', windpipe: 'empty' }, check: ['llung'] }
     ];
-    pickN(r, wrong, 5).forEach(w => shots.push({ kind: 'wrong', text: w.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), w.set), check: w.check || [] }));
-    pickN(r, PARTIALS, 5).forEach(p => shots.push(partialShot(p)));
-    pickN(r, HAND_PAIRS, 4).forEach((pr, i) => shots.push(handShot(pr, HOWS[i])));
+    pickN(r, wrong, 4).forEach(w => shots.push({ kind: 'wrong', text: w.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), w.set), check: w.check || [] }));
+    pickN(r, FLIPS, 2).forEach(x => shots.push(trickShot('flipped', x)));
+    pickN(r, UPSIDES, 1).forEach(x => shots.push(trickShot('upside_down', x)));
+    for (let i = 0; i < 4; i++) shots.push(trickCombo(r));
+    shots.push(partialShot(pickN(r, PARTIALS, 1)[0]));
+    for (let i = 0; i < 2; i++) shots.push(partialCombo(r));
+    shots.push(twoHands(r));
+    shots.push(handShot(pickN(r, HAND_PAIRS, 1)[0], HOWS[0]));
     shots.push({ kind: 'hand', text: 'Reach across the board as if placing a piece: arm and hand over the middle. Mark every zone the hand or sleeve covers as Hand.', labels: Object.assign(allCorrect(), { heart: 'hand', windpipe: 'hand' }), check: ZONES.slice() });
-    return shots.map((s, i) => Object.assign(s, { n: i + 1 }));
+    return done();
   }
 
   const pad = n => String(n).padStart(2, '0');
@@ -167,7 +241,7 @@ S.collect = (() => {
     const applySchedule = () => {
       const n = Number(num.value) || 1, sc = schedule(n);
       split.value = SPLIT(n); light.value = sc.lighting; height.value = sc.camera;
-      tipBox.textContent = `Session ${n}${sc.type === 'focus' ? ' (hands and overlaps only)' : ''}: ${sc.tip}`;
+      tipBox.textContent = `Session ${n}${sc.type === 'focus' ? ' (hands and overlaps only)' : sc.type === 'tricks' ? ' (flipped and upside-down pieces only)' : ''}: ${sc.tip}`;
     };
     num.addEventListener('input', applySchedule);
     applySchedule();
@@ -176,7 +250,7 @@ S.collect = (() => {
     const note = h('input', { type: 'text', id: 'cs-note', placeholder: 'Anything unusual' });
 
     container.replaceChildren(
-      h('p', null, 'Each session is 25 photos. The app tells you what to change for the session, how to arrange the pieces for each photo, and saves the 5 zone pictures already named. Sessions 1 to 12 and 17 onward are for training, 13 to 15 for checking (validation), and 16 is the final test day. Sessions 15, 17, 18 and 20 are hands-and-overlaps sessions.'),
+      h('p', null, 'Each session is 25 photos. The app tells you what to change for the session, how to arrange the pieces for each photo, and saves the 5 zone pictures already named. Sessions 1 to 12 and 17 onward are for training, 13 to 15 for checking (validation), and 16 is the final test day. Sessions 17 and 20 are hands-and-overlaps sessions; 18 and 21 are flipped-and-upside-down sessions.'),
       h('section', null, h('h2', null, 'Start a session'),
         h('form', { class: 'sform', onsubmit: e => {
           e.preventDefault();
@@ -241,7 +315,7 @@ S.collect = (() => {
 
     const captureBtn = h('button', { class: 'btn primary big', type: 'button', disabled: true, onclick: () => capture() }, 'Capture');
     const skipBtn = h('button', { class: 'btn', type: 'button', onclick: () => { if (idx < shots.length) { idx++; extra = 0; showShot(); } } }, 'Skip this shot');
-    const extraKind = h('select', { class: 'inline' }, ['correct', 'empty', 'wrong', 'partial', 'hand'].map(k => h('option', { value: k }, `Extra: ${k}`)));
+    const extraKind = h('select', { class: 'inline' }, ['correct', 'empty', 'wrong', 'flipped', 'upside_down', 'partial', 'hand'].map(k => h('option', { value: k }, `Extra: ${k.replace('_', ' ')}`)));
     const extraBtn = h('button', { class: 'btn', type: 'button', onclick: () => { extra = 1; showShot(); } }, 'Add an extra photo');
     const endBtn = h('button', { class: 'btn', type: 'button', onclick: () => { running = false; S.camera.stop(); setActive(null); view(container); } }, 'Finish for now');
 
@@ -338,7 +412,7 @@ S.collect = (() => {
       });
       review.replaceChildren(
         h('h3', null, 'Check the names, then save'),
-        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye. Hand: any part of a hand, finger or sleeve is over the zone. Partial: a piece is about a quarter or more outside its box, or two pieces share the box. Otherwise name the piece that fills the zone, or Empty.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
+        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye. Hand: any part of a hand, finger or sleeve is over the zone. Partial: a piece is about a quarter or more outside its box, or two pieces share the box. Flipped: a lung or the heart with its back side up. Upside down: a piece turned so its top points down. The diaphragm with its other side up but the right way round is just Diaphragm. Otherwise name the piece that fills the zone, or Empty.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
         h('div', { class: 'cs-crops' }, figs),
         h('div', { class: 'row wrap' },
           h('button', { class: 'btn primary big', type: 'button', onclick: save }, 'Save and next'),
