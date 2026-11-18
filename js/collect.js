@@ -437,9 +437,18 @@ S.collect = (() => {
       review.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    async function save() {
+    let saving = false;
+    async function save(ev) {
       const c = current;
-      const n = c.s.extra ? c.s.n : c.s.n;
+      if (!c || saving) return; /* ignore a double tap */
+      saving = true;
+      const btn = ev && ev.currentTarget;
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+      try { await saveRec(c); } catch (e) { S.ui.toast('Could not save this photo. Try again.'); if (btn) { btn.disabled = false; btn.textContent = 'Save and next'; } saving = false; return; }
+      saving = false;
+    }
+    async function saveRec(c) {
+      const n = c.s.n;
       const rec = {
         id: c.s.extra ? `${shotId(a.session, 99)}-${S.util.rand4()}` : shotId(a.session, n),
         session: a.session, n, split: a.split, kind: c.s.kind, extra: !!c.s.extra, instruction: c.s.text,
