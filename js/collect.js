@@ -49,6 +49,7 @@ S.collect = (() => {
   const PIECE_CAT = { rlung: 'right_lung', llung: 'left_lung', heart: 'heart', windpipe: 'trachea', diaphragm: 'diaphragm' };
   const ZONES = ['rlung', 'windpipe', 'heart', 'llung', 'diaphragm'];
   const ZN = k => S.ORGAN_NAME[k] || k;
+  const ZONE_COLOURS = { rlung: '#E5243B', llung: '#C2185B', windpipe: '#E08A00', heart: '#7B1FA2', diaphragm: '#1565C0' };
   const SPLIT = n => (n <= 12 ? 'train' : n <= 15 ? 'validation' : 'test');
   const ACTIVE_KEY = 'll-collect-active';
 
@@ -228,6 +229,22 @@ S.collect = (() => {
           ctx.drawImage(work, 0, 0);
           ctx.lineWidth = Math.max(3, work.width / 200); ctx.strokeStyle = '#18C964';
           for (const f of lastFound) { ctx.beginPath(); f.corners.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke(); }
+          /* Draw the 5 zone boxes on the live picture, so you can see where each piece belongs */
+          if (lastFound.length === 4) {
+            const ids = Object.keys(S.BOARD.markers).map(Number);
+            const by = Object.fromEntries(lastFound.map(f => [f.id, f.centre]));
+            const Hm = S.aruco.homography(ids.map(i => S.BOARD.markers[i]), ids.map(i => by[i]));
+            if (Hm) {
+              ctx.font = `bold ${Math.max(13, work.width / 45)}px system-ui, sans-serif`;
+              for (const [k, z] of Object.entries(S.BOARD.zones)) {
+                const pts = [[z.x, z.y], [z.x + z.w, z.y], [z.x + z.w, z.y + z.h], [z.x, z.y + z.h]].map(([x, y]) => S.aruco.apply(Hm, x, y));
+                ctx.strokeStyle = ZONE_COLOURS[k]; ctx.lineWidth = Math.max(2, work.width / 300);
+                ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke();
+                ctx.fillStyle = ZONE_COLOURS[k]; ctx.fillText(ZN(k), pts[0][0] + 4, pts[0][1] + Math.max(14, work.width / 40));
+              }
+              ctx.strokeStyle = '#18C964';
+            }
+          }
           const ok = lastFound.length === 4;
           status.className = `camstatus ${ok ? 'ok' : 'bad'}`;
           status.textContent = ok ? 'All 4 markers found. Arrange the pieces, move your hand away (unless this is a hand photo), then tap Capture.' : `${lastFound.length} of 4 markers found. Keep all 4 corner markers in view and uncovered.`;
@@ -270,7 +287,7 @@ S.collect = (() => {
       });
       review.replaceChildren(
         h('h3', null, 'Check the names, then save'),
-        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye: is a piece crossing the edge (Partial), is a hand or sleeve covering it (Hand)? Change the name if needed.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
+        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye. Hand: any part of a hand, finger or sleeve is over the zone. Partial: a piece is about a quarter or more outside its box, or two pieces share the box. Otherwise name the piece that fills the zone, or Empty.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
         h('div', { class: 'cs-crops' }, figs),
         h('div', { class: 'row wrap' },
           h('button', { class: 'btn primary big', type: 'button', onclick: save }, 'Save and next'),
