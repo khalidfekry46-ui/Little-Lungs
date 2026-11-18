@@ -593,3 +593,31 @@ span.ai.hidden { display: none; }
 .bc-crops canvas { width: 140px; height: 140px; border-radius: 8px; display: block; }
 .bc-crops figcaption { font-size: 0.9rem; margin-top: 0.3rem; }
 @media (max-width: 900px) { .bc-grid { grid-template-columns: 1fr; } }
+
+/* Collect photos */
+.formgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem 1rem; }
+.btn.big { min-height: 56px; font-size: 1.1rem; padding: 0.6rem 1.6rem; }
+tr.short td:first-child::after { content: ' (needs more)'; color: var(--warn); font-weight: 700; font-size: 0.85rem; }
+.cs-title { margin-bottom: 0.25rem; }
+.cs-instr { font-size: 1.25rem; font-weight: 700; line-height: 1.4; padding: 0.9rem 1.1rem; border-radius: 12px; background: var(--accent-tint); max-width: 60rem; }
+.cs-live { max-width: 720px; }
+.cs-review { margin-top: 1rem; }
+.cs-crops { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.75rem 0; }
+.cs-crops figure { margin: 0; display: grid; gap: 0.4rem; justify-items: center; padding: 6px; border-radius: 12px; border: 3px solid transparent; }
+.cs-crops figure.check { border-color: #F59E0B; }
+.cs-crops canvas { width: 150px; height: 150px; border-radius: 8px; }
+.cs-crops figcaption { display: grid; gap: 0.3rem; text-align: center; font-size: 0.9rem; }
+
+/* Phones: a compact top bar that scrolls away */
+@media (max-width: 700px) {
+  .opbar { position: static; gap: 0.4rem 0.75rem; padding: 0.5rem 12px; }
+  .opbrand .muted { display: none; }
+  .opbar .opnav { order: 3; flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .opnav button { min-height: 40px; padding: 0.4rem 0.65rem; white-space: nowrap; }
+  .opbar .modes { margin-left: auto; }
+  .subbar { padding: 0.3rem 8px; }
+  .subbar .opnav.sub { flex-wrap: nowrap; overflow-x: auto; }
+  .subbar .modes { display: none; }
+  .cs-crops canvas { width: 120px; height: 120px; }
+}
+select.inline { width: auto; min-height: 44px; }

@@ -190,7 +190,7 @@ S.store = (() => {
   function open() {
     if (dbp) return dbp;
     dbp = new Promise((resolve, reject) => {
-      const req = indexedDB.open('anatomy-station', 2);
+      const req = indexedDB.open('anatomy-station', 3);
       req.onupgradeneeded = () => {
         const db = req.result;
         const make = (n, o) => { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, o); };
@@ -198,6 +198,7 @@ S.store = (() => {
         make('kv');
         make('photos', { keyPath: 'id' });
         make('prep', { keyPath: 'id' });
+        make('training', { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);

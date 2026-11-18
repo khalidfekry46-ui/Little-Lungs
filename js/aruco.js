@@ -217,10 +217,10 @@ S.BOARD = {
   pxPerCm: 10,
   zones: {
     rlung: { x: -2.5, y: 2.8, w: 15.0, h: 29.1 },
-    windpipe: { x: 10.8, y: -5.0, w: 8.3, h: 24.2 },
+    windpipe: { x: 10.8, y: -6.0, w: 8.3, h: 25.2 },
     heart: { x: 10.1, y: 17.0, w: 10.0, h: 14.8 },
     llung: { x: 16.9, y: 3.7, w: 11.5, h: 29.5 },
-    diaphragm: { x: -2.2, y: 29.3, w: 28.4, h: 10.3 }
+    diaphragm: { x: -2.2, y: 27.8, w: 29.4, h: 9.2 }
   }
 };
 

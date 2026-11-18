@@ -40,7 +40,7 @@ S.admin = (() => {
 
   /* Management pages share a second row of tabs */
   function frame(title, content, active) {
-    const nav = [['overview', 'Overview', overview], ['review', 'Review', reviewList], ['stats', 'Statistics', stats], ['photos', 'Board photos', photos], ['boardcheck', 'Board check', boardCheckPage], ['settings', 'Settings', settings]];
+    const nav = [['overview', 'Overview', overview], ['review', 'Review', reviewList], ['stats', 'Statistics', stats], ['photos', 'Board photos', photos], ['boardcheck', 'Board check', boardCheckPage], ['collect', 'Collect photos', collectPage], ['settings', 'Settings', settings]];
     const st = S.settings.get();
     const modes = [st.picoMode === 'sim' ? 'Pico: simulator' : 'Pico: live', st.visionMode === 'sim' ? 'Camera AI: simulator' : 'Camera AI: live'];
     return mainFrame('manage', h('div', null,
@@ -190,6 +190,7 @@ S.admin = (() => {
     frame('Overview', content, 'overview');
   }
 
+  function collectPage() { const box = h('div', { class: 'collect' }); frame('Collect photos', box, 'collect'); S.collect.view(box); }
   function boardCheckPage() { frame('Board check', S.boardCheck.view(), 'boardcheck'); }
 
   /* ---------- Station self-check ---------- */
