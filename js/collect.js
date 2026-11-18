@@ -101,12 +101,14 @@ S.collect = (() => {
      so its zone shows a Partial piece (and the zone it pushes into shows two pieces = Partial). */
   const DECOYS = [
     { text: 'Put the windpipe on the TOP round magnet pair (up in the neck) instead of its star magnets.', set: { windpipe: 'partial' } },
-    { text: 'Put the right lung on the UPPER-LEFT round magnet pair instead of its diamond magnet. If it covers the top-left marker, move it until the marker is fully visible and tell your teammate.', set: { rlung: 'partial' } },
+    { text: 'Put the right lung on the LEFT round magnet pair (near the left edge, lower down) instead of its diamond magnet.', set: { rlung: 'partial', diaphragm: 'partial' } },
     { text: 'Put the heart on the MIDDLE round magnet pair (between the lungs) instead of its lower star magnets.', set: { heart: 'partial', windpipe: 'partial' } },
     { text: 'Put the left lung on the RIGHT round magnet pair (below its diamond) instead of its diamond magnet.', set: { llung: 'partial', diaphragm: 'partial' } },
-    { text: 'Put the diaphragm on the BOTTOM-RIGHT round magnet pair instead of its round magnets in the middle. Keep it off the bottom-right marker.', set: { diaphragm: 'partial' } },
+    { text: 'Put the diaphragm on the LOWER-RIGHT round magnet pair instead of its round magnets in the middle. Keep it off the bottom-right marker.', set: { diaphragm: 'partial', llung: 'partial' } },
     { text: 'Put the left lung on the MIDDLE round magnet pair (between the lungs), and take the heart off the board.', set: { llung: 'partial', heart: 'partial', windpipe: 'partial' } },
-    { text: 'Put the heart on the RIGHT round magnet pair (below the left lung\u2019s diamond).', set: { heart: 'partial', llung: 'partial' } }
+    { text: 'Put the heart on the RIGHT round magnet pair (below the left lung\u2019s diamond).', set: { heart: 'partial', llung: 'partial' } },
+    { text: 'Put the heart on the LEFT round magnet pair (near the left edge), over the right lung\u2019s box.', set: { heart: 'empty', rlung: 'partial' } },
+    { text: 'Put the left lung on the LOWER-RIGHT round magnet pair.', set: { llung: 'partial', diaphragm: 'partial' } }
   ];
   const decoyShot = d => ({ kind: 'partial', decoy: true, text: d.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), d.set), check: ZONES.slice() });
   const HAND_PAIRS = [['rlung', 'heart'], ['heart', 'llung'], ['windpipe', 'heart'], ['rlung', 'diaphragm'], ['llung', 'diaphragm'], ['windpipe', 'rlung'], ['windpipe', 'llung'], ['heart', 'diaphragm']];
