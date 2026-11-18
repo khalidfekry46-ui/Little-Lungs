@@ -238,6 +238,8 @@ S.collect = (() => {
 
   /* ---------- Session list ---------- */
   async function view(container) {
+    /* Ask the browser to keep the photos even when the phone is low on space */
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* not supported */ }
     const active = getActive();
     if (active) return shoot(container, active);
     const shots = await allShots();

@@ -7,6 +7,13 @@ window.S = window.S || {};
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline mode unavailable here */ });
+    /* When a new version has been uploaded, reload once to use it, but never in the middle of a test */
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded || (S.test && S.test.session)) return;
+      reloaded = true;
+      location.reload();
+    });
   }
   /* Keep the tablet screen on during a session where the browser allows it */
   document.addEventListener('visibilitychange', async () => {

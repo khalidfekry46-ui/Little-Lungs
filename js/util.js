@@ -202,6 +202,7 @@ S.store = (() => {
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
+      req.onblocked = () => { if (S.ui && S.ui.toast) S.ui.toast('Close the other Little Lungs tabs, then reload this page.'); };
     });
     return dbp;
   }
