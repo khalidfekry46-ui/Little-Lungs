@@ -50,7 +50,7 @@ S.collect = (() => {
   const ZONES = ['rlung', 'windpipe', 'heart', 'llung', 'diaphragm'];
   const ZN = k => S.ORGAN_NAME[k] || k;
   const ZONE_COLOURS = { rlung: '#E5243B', llung: '#C2185B', windpipe: '#E08A00', heart: '#7B1FA2', diaphragm: '#1565C0' };
-  const SPLIT = n => (n <= 12 ? 'train' : n <= 15 ? 'validation' : 'test');
+  const SPLIT = n => (n <= 12 || n >= 17 ? 'train' : n <= 15 ? 'validation' : 'test');
   const ACTIVE_KEY = 'll-collect-active';
 
   /* Seeded random numbers, so a session's plan is the same every time it is opened */
@@ -58,16 +58,68 @@ S.collect = (() => {
   const pickN = (r, arr, n) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, n); };
   const allCorrect = () => Object.fromEntries(ZONES.map(z => [z, PIECE_CAT[z]]));
 
-  /* The 25-shot plan for a session: 8 correct, 4 with empty zones, 6 wrong, 4 partial, 3 hand */
+  /* What to change in each session, so the photos differ (lighting, camera position, room, hands).
+     type: 'standard' (all kinds of photos) or 'focus' (only hands and overlaps, the two rarest categories). */
+  const SCHEDULE = {
+    1: { type: 'standard', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Ceiling lights on. Phone at a normal height, straight above the board.' },
+    2: { type: 'standard', lighting: 'Ceiling lights', camera: 'A little higher', tip: 'Ceiling lights on. Hold the phone about 10 cm higher than last time.' },
+    3: { type: 'standard', lighting: 'Ceiling lights', camera: 'A little lower', tip: 'Ceiling lights on. Hold the phone about 10 cm lower (all 4 markers must still show).' },
+    4: { type: 'standard', lighting: 'Desk lamp from the left', camera: 'Normal height', tip: 'Main light off, a desk lamp or phone torch shining from the LEFT side.' },
+    5: { type: 'standard', lighting: 'Desk lamp from the right', camera: 'Tilted a little', tip: 'Lamp from the RIGHT side. Tilt the phone a little (about 15 degrees).' },
+    6: { type: 'standard', lighting: 'Desk lamp from above', camera: 'Moved to one side', tip: 'Lamp from above. Move the phone a little toward one side of the board.' },
+    7: { type: 'standard', lighting: 'Dim room', camera: 'Normal height', tip: 'Dim room: main light off, only a weak light far away.' },
+    8: { type: 'standard', lighting: 'Dim room', camera: 'A little higher', tip: 'Dim room again, phone a little higher.' },
+    9: { type: 'standard', lighting: 'Mixed / changing', camera: 'Tilted a little', tip: 'Ceiling light AND a lamp from one side. Tilt the phone the other way this time.' },
+    10: { type: 'standard', lighting: 'Ceiling lights', camera: 'Moved to one side', tip: 'Move the board to a DIFFERENT room or table. Ceiling lights.' },
+    11: { type: 'standard', lighting: 'Mixed / changing', camera: 'A little lower', tip: 'Different room or table again. Let a shadow fall across part of the board.' },
+    12: { type: 'standard', lighting: 'Daylight from a window', camera: 'Normal height', tip: 'Daylight if you can (otherwise any new light). Use hands and sleeves you have not used before.' },
+    13: { type: 'standard', lighting: 'Daylight from a window', camera: 'On the holder', tip: 'VALIDATION. Another day, daylight, tablet on the holder.' },
+    14: { type: 'standard', lighting: 'Ceiling lights', camera: 'On the holder', tip: 'VALIDATION. Ceiling lights, tablet on the holder, new hands.' },
+    15: { type: 'focus', lighting: 'Desk lamp from the left', camera: 'On the holder', tip: 'VALIDATION (hands and overlaps). Lamp from one side, tablet on the holder.' },
+    16: { type: 'standard', lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. The real station: MatePad on the holder, in the room where students will be tested. Use this session only once.' },
+    17: { type: 'focus', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'EXTRA TRAINING: hands and overlaps. Ceiling lights, normal height.' },
+    18: { type: 'focus', lighting: 'Desk lamp from the right', camera: 'Tilted a little', tip: 'EXTRA TRAINING: hands and overlaps. Lamp from the right, phone tilted.' },
+    19: { type: 'standard', lighting: 'Daylight from a window', camera: 'A little higher', tip: 'EXTRA TRAINING. Daylight, a little higher, new hands.' },
+    20: { type: 'focus', lighting: 'Dim room', camera: 'A little lower', tip: 'EXTRA TRAINING: hands and overlaps. Dim room, a little lower.' }
+  };
+  const schedule = n => SCHEDULE[n] || { type: n % 2 ? 'standard' : 'focus', lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick lighting and a camera position you have used least so far.' };
+
+  const PARTIALS = [
+    { text: 'Slide the heart halfway into the left lung’s box (it may lie on the lung’s edge).', set: { heart: 'partial', llung: 'partial' } },
+    { text: 'Slide the right lung outward so about a third of it is outside its box.', set: { rlung: 'partial' } },
+    { text: 'Slide the left lung outward so about a third of it is outside its box.', set: { llung: 'partial' } },
+    { text: 'Push the diaphragm up so it overlaps the bottom of both lungs. Keep it off the corner markers.', set: { diaphragm: 'partial', rlung: 'partial', llung: 'partial' } },
+    { text: 'Take the heart off, then slide the windpipe down so its lower half is in the heart’s box.', set: { windpipe: 'partial', heart: 'partial' } },
+    { text: 'Slide the left lung toward the middle so it covers part of the heart’s box.', set: { llung: 'partial', heart: 'partial' } },
+    { text: 'Put the heart across the right lung’s inner edge, half on the lung.', set: { heart: 'partial', rlung: 'partial' } },
+    { text: 'Slide the windpipe sideways so half of it is over the right lung’s box.', set: { windpipe: 'partial', rlung: 'partial' } },
+    { text: 'Slide the diaphragm to the right so one end sticks well out of its box.', set: { diaphragm: 'partial' } },
+    { text: 'Put the heart low, half in the heart box and half on the diaphragm.', set: { heart: 'partial', diaphragm: 'partial' } }
+  ];
+  const HAND_PAIRS = [['rlung', 'heart'], ['heart', 'llung'], ['windpipe', 'heart'], ['rlung', 'diaphragm'], ['llung', 'diaphragm'], ['windpipe', 'rlung'], ['windpipe', 'llung'], ['heart', 'diaphragm']];
+  const handShot = (pair, how) => ({ kind: 'hand', text: `${how} over the ${pair.map(ZN).join(' and ')} boxes, all pieces in place. Use a different hand or sleeve each time. Mark every zone the hand or sleeve covers as Hand.`, labels: Object.assign(allCorrect(), Object.fromEntries(pair.map(z => [z, 'hand']))), check: ZONES.slice() });
+  const HOWS = ['Hold a hand flat', 'Hold a hand as if about to place a piece', 'Rest your fingertips', 'Hold a hand with a sleeve'];
+  const partialShot = p => ({ kind: 'partial', text: p.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), p.set), check: ZONES.slice() });
+
+  /* The 25-shot plan for a session.
+     Standard: 6 correct, 4 with empty zones, 5 wrong, 5 partial, 5 hand.
+     Focus: 12 hand, 13 partial (hands and overlaps are the rarest categories). */
   function plan(session) {
     const r = rng(session * 7919 + 17);
+    const type = schedule(session).type;
     const shots = [];
-    const moves = ['exactly in place', 'all shifted a little to the left', 'all shifted a little to the right', 'all shifted a little up', 'all shifted a little down',
-      'each turned slightly clockwise', 'each turned slightly anticlockwise', 'placed a bit carelessly, each one slightly off'];
+    if (type === 'focus') {
+      pickN(r, HAND_PAIRS, 8).forEach((pr, i) => shots.push(handShot(pr, HOWS[i % HOWS.length])));
+      pickN(r, ZONES, 4).forEach((z, i) => shots.push(handShot([z], HOWS[(i + 1) % HOWS.length])));
+      const ps = pickN(r, PARTIALS, PARTIALS.length);
+      for (let i = 0; i < 13; i++) shots.push(partialShot(ps[i % ps.length]));
+      return shots.map((s, i) => Object.assign(s, { n: i + 1 }));
+    }
+    const moves = pickN(r, ['exactly in place', 'all shifted a little to the left', 'all shifted a little to the right', 'all shifted a little up', 'all shifted a little down',
+      'each turned slightly clockwise', 'each turned slightly anticlockwise', 'placed a bit carelessly, each one slightly off'], 6);
     moves.forEach(m => shots.push({ kind: 'correct', text: `All 5 pieces in their correct places, ${m}. Keep every piece inside its box.`, labels: allCorrect(), check: [] }));
-    const removable = ZONES.slice();
     for (let i = 0; i < 3; i++) {
-      const gone = pickN(r, removable, 1 + i);
+      const gone = pickN(r, ZONES, 1 + i);
       const labels = allCorrect(); gone.forEach(z => { labels[z] = 'empty'; });
       shots.push({ kind: 'empty', text: `Take these off the board: ${gone.map(ZN).join(', ')}. Everything else in its correct place.`, labels, check: [] });
     }
@@ -81,18 +133,9 @@ S.collect = (() => {
       { text: 'Put the heart in the left lung’s place, and take the left lung off the board.', set: { llung: 'heart', heart: 'empty' } },
       { text: 'Put the windpipe in the left lung’s place, and take the left lung off the board.', set: { llung: 'trachea', windpipe: 'empty' }, check: ['llung'] }
     ];
-    pickN(r, wrong, 6).forEach(w => shots.push({ kind: 'wrong', text: w.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), w.set), check: w.check || [] }));
-    const partial = [
-      { text: 'Slide the heart halfway into the left lung’s box (it may lie on the lung’s edge).', set: { heart: 'partial', llung: 'partial' } },
-      { text: 'Slide the right lung outward so about a third of it is outside its box.', set: { rlung: 'partial' } },
-      { text: 'Push the diaphragm up so it overlaps the bottom of both lungs. Keep it off the corner markers.', set: { diaphragm: 'partial', rlung: 'partial', llung: 'partial' } },
-      { text: 'Take the heart off, then slide the windpipe down so its lower half is in the heart’s box.', set: { windpipe: 'partial', heart: 'partial' } },
-      { text: 'Slide the left lung toward the middle so it covers part of the heart’s box.', set: { llung: 'partial', heart: 'partial' } },
-      { text: 'Put the heart across the right lung’s inner edge, half on the lung.', set: { heart: 'partial', rlung: 'partial' } }
-    ];
-    pickN(r, partial, 4).forEach(p => shots.push({ kind: 'partial', text: p.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), p.set), check: ZONES.slice() }));
-    const handZones = pickN(r, ZONES, 2);
-    handZones.forEach(z => shots.push({ kind: 'hand', text: `Hold a hand flat over the ${ZN(z)} box (all pieces in place). Use a different hand or sleeve each time.`, labels: Object.assign(allCorrect(), { [z]: 'hand' }), check: ZONES.slice() }));
+    pickN(r, wrong, 5).forEach(w => shots.push({ kind: 'wrong', text: w.text + ' Everything else in its correct place.', labels: Object.assign(allCorrect(), w.set), check: w.check || [] }));
+    pickN(r, PARTIALS, 5).forEach(p => shots.push(partialShot(p)));
+    pickN(r, HAND_PAIRS, 4).forEach((pr, i) => shots.push(handShot(pr, HOWS[i])));
     shots.push({ kind: 'hand', text: 'Reach across the board as if placing a piece: arm and hand over the middle. Mark every zone the hand or sleeve covers as Hand.', labels: Object.assign(allCorrect(), { heart: 'hand', windpipe: 'hand' }), check: ZONES.slice() });
     return shots.map((s, i) => Object.assign(s, { n: i + 1 }));
   }
@@ -118,24 +161,32 @@ S.collect = (() => {
 
     const num = h('input', { type: 'number', min: 1, max: 40, value: next, id: 'cs-num' });
     const split = h('select', { id: 'cs-split' }, ['train', 'validation', 'test'].map(v => h('option', { value: v, selected: v === SPLIT(next) ? true : null }, v)));
-    num.addEventListener('input', () => { split.value = SPLIT(Number(num.value) || 1); });
-    const light = h('select', { id: 'cs-light' }, ['Ceiling lights', 'Daylight from a window', 'Desk lamp from one side', 'Dim room', 'Mixed / changing', 'Other'].map(v => h('option', null, v)));
-    const height = h('select', { id: 'cs-height' }, ['Normal height', 'A little higher', 'A little lower', 'Tilted a little', 'Moved to one side'].map(v => h('option', null, v)));
+    const light = h('select', { id: 'cs-light' }, ['Ceiling lights', 'Daylight from a window', 'Desk lamp from the left', 'Desk lamp from the right', 'Desk lamp from above', 'Dim room', 'Mixed / changing', 'Other'].map(v => h('option', null, v)));
+    const height = h('select', { id: 'cs-height' }, ['Normal height', 'A little higher', 'A little lower', 'Tilted a little', 'Moved to one side', 'On the holder'].map(v => h('option', null, v)));
+    const tipBox = h('p', { class: 'cs-instr' });
+    const applySchedule = () => {
+      const n = Number(num.value) || 1, sc = schedule(n);
+      split.value = SPLIT(n); light.value = sc.lighting; height.value = sc.camera;
+      tipBox.textContent = `Session ${n}${sc.type === 'focus' ? ' (hands and overlaps only)' : ''}: ${sc.tip}`;
+    };
+    num.addEventListener('input', applySchedule);
+    applySchedule();
     const device = h('input', { type: 'text', id: 'cs-device', value: navigator.userAgent.includes('Android') ? 'Phone or tablet (Android)' : '', placeholder: 'e.g. MatePad, Samsung phone' });
     const hands = h('input', { type: 'text', id: 'cs-hands', placeholder: 'e.g. Omar, sleeve; Sara' });
     const note = h('input', { type: 'text', id: 'cs-note', placeholder: 'Anything unusual' });
 
     container.replaceChildren(
-      h('p', null, 'Each session is 25 photos. The app tells you how to arrange the pieces for each one, then saves the 5 zone pictures already named. Sessions 1 to 12 are for training, 13 to 15 for checking (validation), and 16 is the final test day.'),
+      h('p', null, 'Each session is 25 photos. The app tells you what to change for the session, how to arrange the pieces for each photo, and saves the 5 zone pictures already named. Sessions 1 to 12 and 17 onward are for training, 13 to 15 for checking (validation), and 16 is the final test day. Sessions 15, 17, 18 and 20 are hands-and-overlaps sessions.'),
       h('section', null, h('h2', null, 'Start a session'),
         h('form', { class: 'sform', onsubmit: e => {
           e.preventDefault();
           const n = Number(num.value);
           if (!(n >= 1)) { S.ui.toast('Choose a session number.'); return; }
-          const a = { session: n, split: split.value, lighting: light.value, camera: height.value, device: device.value.trim(), hands: hands.value.trim(), note: note.value.trim(), started_at: new Date().toISOString() };
+          const a = { session: n, tip: schedule(n).tip, split: split.value, lighting: light.value, camera: height.value, device: device.value.trim(), hands: hands.value.trim(), note: note.value.trim(), started_at: new Date().toISOString() };
           setActive(a);
           shoot(container, a);
         } },
+          tipBox,
           h('div', { class: 'formgrid' },
             h('label', { class: 'field' }, h('span', null, 'Session number'), num),
             h('label', { class: 'field' }, h('span', null, 'Use for'), split),
@@ -319,12 +370,12 @@ S.collect = (() => {
     }
 
     container.replaceChildren(
+      h('p', { class: 'cs-tip' }, h('strong', null, 'This session: '), schedule(a.session).tip, ` (Lighting: ${a.lighting}. Camera: ${a.camera}.)`),
       title, instr,
       h('div', { class: 'row wrap' }, captureBtn, skipBtn, extraKind, extraBtn, endBtn),
       status,
       h('div', { class: 'cs-live' }, overlay),
-      review,
-      h('p', { class: 'muted small' }, `Lighting: ${a.lighting}. Camera: ${a.camera}.${a.hands ? ` Hands: ${a.hands}.` : ''}`));
+      review);
     showShot();
     const r = await S.camera.test(S.settings.get().cameraFacing || 'environment');
     if (!r.ok) { status.className = 'camstatus bad'; status.textContent = r.message; return; }

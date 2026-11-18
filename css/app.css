@@ -621,3 +621,4 @@ tr.short td:first-child::after { content: ' (needs more)'; color: var(--warn); f
   .cs-crops canvas { width: 120px; height: 120px; }
 }
 select.inline { width: auto; min-height: 44px; }
+.cs-tip { padding: 0.6rem 0.9rem; border-left: 4px solid #F59E0B; background: var(--warn-tint); border-radius: 8px; max-width: 60rem; }
