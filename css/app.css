@@ -622,3 +622,7 @@ tr.short td:first-child::after { content: ' (needs more)'; color: var(--warn); f
 }
 select.inline { width: auto; min-height: 44px; }
 .cs-tip { padding: 0.6rem 0.9rem; border-left: 4px solid #F59E0B; background: var(--warn-tint); border-radius: 8px; max-width: 60rem; }
+.cs-instr { white-space: pre-line; }
+.tags { display: grid; gap: 0.15rem; text-align: left; font-size: 0.82rem; }
+.tagbox { display: flex; gap: 0.35rem; align-items: center; }
+.tagbox input { width: 18px; height: 18px; }

@@ -50,7 +50,7 @@ S.collect = (() => {
   const ZONES = ['rlung', 'windpipe', 'heart', 'llung', 'diaphragm'];
   const ZN = k => S.ORGAN_NAME[k] || k;
   const ZONE_COLOURS = { rlung: '#E5243B', llung: '#C2185B', windpipe: '#E08A00', heart: '#7B1FA2', diaphragm: '#1565C0' };
-  const SPLIT = n => (n <= 12 || n >= 17 ? 'train' : n <= 15 ? 'validation' : 'test');
+  const SPLIT = n => (n === 5 ? 'test' : 'train');
   const ACTIVE_KEY = 'll-collect-active';
 
   /* Seeded random numbers, so a session's plan is the same every time it is opened */
@@ -61,29 +61,13 @@ S.collect = (() => {
   /* What to change in each session, so the photos differ (lighting, camera position, room, hands).
      type: 'standard' (all kinds of photos), 'focus' (only hands and overlaps) or 'tricks' (only flipped and upside-down pieces). */
   const SCHEDULE = {
-    1: { type: 'standard', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Ceiling lights on. Phone at a normal height, straight above the board.' },
-    2: { type: 'standard', lighting: 'Ceiling lights', camera: 'A little higher', tip: 'Ceiling lights on. Hold the phone about 10 cm higher than last time.' },
-    3: { type: 'standard', lighting: 'Ceiling lights', camera: 'A little lower', tip: 'Ceiling lights on. Hold the phone about 10 cm lower (all 4 markers must still show).' },
-    4: { type: 'standard', lighting: 'Desk lamp from the left', camera: 'Normal height', tip: 'Main light off, a desk lamp or phone torch shining from the LEFT side.' },
-    5: { type: 'standard', lighting: 'Desk lamp from the right', camera: 'Tilted a little', tip: 'Lamp from the RIGHT side. Tilt the phone a little (about 15 degrees).' },
-    6: { type: 'standard', lighting: 'Desk lamp from above', camera: 'Moved to one side', tip: 'Lamp from above. Move the phone a little toward one side of the board.' },
-    7: { type: 'standard', lighting: 'Dim room', camera: 'Normal height', tip: 'Dim room: main light off, only a weak light far away.' },
-    8: { type: 'standard', lighting: 'Dim room', camera: 'A little higher', tip: 'Dim room again, phone a little higher.' },
-    9: { type: 'standard', lighting: 'Mixed / changing', camera: 'Tilted a little', tip: 'Ceiling light AND a lamp from one side. Tilt the phone the other way this time.' },
-    10: { type: 'standard', lighting: 'Ceiling lights', camera: 'Moved to one side', tip: 'Move the board to a DIFFERENT room or table. Ceiling lights.' },
-    11: { type: 'standard', lighting: 'Mixed / changing', camera: 'A little lower', tip: 'Different room or table again. Let a shadow fall across part of the board.' },
-    12: { type: 'standard', lighting: 'Daylight from a window', camera: 'Normal height', tip: 'Daylight if you can (otherwise any new light). Use hands and sleeves you have not used before.' },
-    13: { type: 'standard', lighting: 'Daylight from a window', camera: 'On the holder', tip: 'VALIDATION. Another day, daylight, tablet on the holder.' },
-    14: { type: 'standard', lighting: 'Ceiling lights', camera: 'On the holder', tip: 'VALIDATION. Ceiling lights, tablet on the holder, new hands.' },
-    15: { type: 'standard', lighting: 'Desk lamp from the left', camera: 'On the holder', tip: 'VALIDATION. Lamp from one side, tablet on the holder.' },
-    16: { type: 'standard', lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. The real station: MatePad on the holder, in the room where students will be tested. Use this session only once.' },
-    17: { type: 'focus', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'EXTRA TRAINING: hands and overlaps. Ceiling lights, normal height.' },
-    18: { type: 'tricks', lighting: 'Desk lamp from the right', camera: 'Tilted a little', tip: 'EXTRA TRAINING: flipped and upside-down pieces. Lamp from the right, phone tilted.' },
-    19: { type: 'standard', lighting: 'Daylight from a window', camera: 'A little higher', tip: 'EXTRA TRAINING. Daylight, a little higher, new hands.' },
-    20: { type: 'focus', lighting: 'Dim room', camera: 'A little lower', tip: 'EXTRA TRAINING: hands and overlaps. Dim room, a little lower.' },
-    21: { type: 'tricks', lighting: 'Ceiling lights', camera: 'A little higher', tip: 'EXTRA TRAINING: flipped and upside-down pieces. Ceiling lights, a little higher.' }
+    1: { type: 'standard', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Done on Khalid\u2019s phone. On another device, start at session 2.' },
+    2: { type: 'mixed', count: 40, lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Ceiling lights. Camera where the holder will be, a little closer than session 1 so the board fills most of the picture.' },
+    3: { type: 'mixed', count: 40, lighting: 'Desk lamp from the left', camera: 'Tilted a little', tip: 'Main light off, a lamp or phone torch from one side (shadows are good). Camera a little lower or tilted. Use different hands and sleeves.' },
+    4: { type: 'mixed', count: 40, lighting: 'Daylight from a window', camera: 'A little higher', tip: 'Daylight or a different room, another day if you can. Camera a little higher or further away.' },
+    5: { type: 'mixed', count: 30, lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. Another day, the real setup (holder, the device students will use). These photos are never used for training, only to measure accuracy.' }
   };
-  const schedule = n => SCHEDULE[n] || { type: ['standard', 'focus', 'tricks'][n % 3], lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick lighting and a camera position you have used least so far.' };
+  const schedule = n => SCHEDULE[n] || { type: 'mixed', count: 40, lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick a light and camera position used least so far.' };
 
   const PARTIALS = [
     { text: 'Slide the heart halfway into the left lung’s box (it may lie on the lung’s edge).', set: { heart: 'partial', llung: 'partial' } },
@@ -179,6 +163,83 @@ S.collect = (() => {
     }
   }
 
+  /* ---------- Mixed photos: every zone can change at once, including two things together ----------
+     Main name per zone, by priority: Hand > Partial > Flipped > Upside down > the piece > Empty.
+     Tags keep everything else that is true (for example Partial AND flipped). */
+  const PIECES = ZONES; /* piece ids are the same as their home zone ids */
+  const PIECE_NAME = { rlung: 'Right lung', llung: 'Left lung', heart: 'Heart', windpipe: 'Windpipe', diaphragm: 'Diaphragm' };
+  const DECOY_MOVES = {
+    windpipe: [{ where: 'on the TOP round magnet pair (in the neck)', hits: ['windpipe'] }],
+    rlung: [{ where: 'on the LEFT round magnet pair (near the left edge)', hits: ['rlung', 'diaphragm'] }],
+    heart: [{ where: 'on the MIDDLE round magnet pair (between the lungs)', hits: ['heart', 'windpipe'] }, { where: 'on the RIGHT round magnet pair (below the left lung’s diamond)', hits: ['heart', 'llung'] }],
+    llung: [{ where: 'on the RIGHT round magnet pair (below its diamond)', hits: ['llung', 'diaphragm'] }, { where: 'on the LOWER-RIGHT round magnet pair', hits: ['llung', 'diaphragm'] }],
+    diaphragm: [{ where: 'on the LOWER-RIGHT round magnet pair', hits: ['diaphragm', 'llung'] }]
+  };
+  function mixedShot(r) {
+    const at = Object.fromEntries(PIECES.map(p => [p, p])); /* piece -> zone it sits in, or 'off', or 'decoy' */
+    const mods = Object.fromEntries(PIECES.map(p => [p, []]));
+    const lines = {};
+    const partialZones = new Set(), handZones = [];
+    let check = false;
+    /* 1. Swap two pieces */
+    if (r() < 0.35) {
+      if (r() < 0.65) { at.rlung = 'llung'; at.llung = 'rlung'; } else { at.heart = 'windpipe'; at.windpipe = 'heart'; check = true; }
+    }
+    /* 2. Take one piece off */
+    const offable = PIECES.filter(p => at[p] === p);
+    if (r() < 0.45 && offable.length) { const k = r() < 0.3 ? 2 : 1; pickN(r, offable, k).forEach(p => { at[p] = 'off'; }); }
+    /* 3. One piece onto a decoy magnet */
+    const decoyable = PIECES.filter(p => at[p] === p);
+    if (r() < 0.22 && decoyable.length) {
+      const p = decoyable[Math.floor(r() * decoyable.length)];
+      const m = DECOY_MOVES[p][Math.floor(r() * DECOY_MOVES[p].length)];
+      at[p] = 'decoy'; lines[p] = m.where; m.hits.forEach(z => partialZones.add(z)); check = true;
+    }
+    /* 4. Flip, upside down, slide out (several can happen to one piece) */
+    for (const p of PIECES) {
+      if (at[p] === 'off') continue;
+      if ((p === 'rlung' || p === 'llung' || p === 'heart') && r() < 0.28) mods[p].push('flipped');
+      if (r() < (p === 'windpipe' || p === 'diaphragm' ? 0.25 : 0.18)) mods[p].push('upside_down');
+      if (p === 'diaphragm' && r() < 0.4) mods[p].push('other_side');
+      if (at[p] !== 'decoy' && r() < 0.08) { mods[p].push('slid'); partialZones.add(at[p]); check = true; }
+    }
+    /* 5. Hands */
+    if (r() < 0.3) { const pr = HAND_PAIRS[Math.floor(r() * HAND_PAIRS.length)]; (r() < 0.5 ? pr : [pr[0]]).forEach(z => handZones.push(z)); check = true; }
+    /* Names per zone */
+    const labels = {}, tags = {};
+    for (const z of ZONES) {
+      const here = PIECES.filter(p => at[p] === z);
+      const t = new Set();
+      here.forEach(p => { mods[p].forEach(m => m !== 'other_side' && t.add(m)); if (p !== z) t.add('wrong_place'); });
+      if (partialZones.has(z)) t.add('partial');
+      let lab;
+      if (handZones.includes(z)) lab = 'hand';
+      else if (partialZones.has(z) || here.length > 1) lab = 'partial';
+      else if (here.length === 1 && mods[here[0]].includes('flipped')) lab = 'flipped';
+      else if (here.length === 1 && mods[here[0]].includes('upside_down')) lab = 'upside_down';
+      else if (here.length === 1) lab = PIECE_CAT[here[0]];
+      else lab = 'empty';
+      labels[z] = lab; tags[z] = [...t];
+    }
+    /* Instruction, one line per piece */
+    const how = p => {
+      const m = mods[p], bits = [];
+      if (m.includes('flipped')) bits.push('FLIPPED (back side up)');
+      if (m.includes('upside_down')) bits.push('UPSIDE DOWN');
+      if (m.includes('other_side')) bits.push('other side up');
+      if (m.includes('slid')) bits.push('slid so about a third is OUTSIDE its box');
+      return bits.length ? ', ' + bits.join(', ') : '';
+    };
+    const text = PIECES.map(p => {
+      if (at[p] === 'off') return `${PIECE_NAME[p]}: off the board.`;
+      if (at[p] === 'decoy') return `${PIECE_NAME[p]}: ${lines[p]}${how(p)}.`;
+      if (at[p] !== p) return `${PIECE_NAME[p]}: in the ${ZN(at[p]).toUpperCase()} box${how(p)}.`;
+      return `${PIECE_NAME[p]}: in its own place${how(p) || ', correct'}.`;
+    }).concat(handZones.length ? [`Hand: hold a hand or sleeve over the ${handZones.map(ZN).join(' and ')} box${handZones.length > 1 ? 'es' : ''}.`] : []).join('\n');
+    const bad = ZONES.filter(z => labels[z] !== PIECE_CAT[z]).length;
+    return { kind: bad ? 'mixed' : 'correct', text, labels, tags, check: check ? ZONES.slice() : [] };
+  }
+
   /* The 25-shot plan for a session.
      Standard: 5 correct (2 with the diaphragm's other side up), 3 empty, 4 wrong, 7 flipped or upside down, 3 partial, 3 hand.
      Focus: 12 hand, 13 partial. Tricks: 25 mixed flipped and upside-down photos. */
@@ -187,6 +248,12 @@ S.collect = (() => {
     const type = schedule(session).type;
     const shots = [];
     const done = () => shots.map((s, i) => Object.assign(s, { n: i + 1 }));
+    if (type === 'mixed') {
+      const n = schedule(session).count || 40;
+      /* About 1 in 8 photos all correct, so correct pieces stay common */
+      for (let i = 0; i < n; i++) shots.push(i % 8 === 0 ? { kind: 'correct', text: 'All 5 pieces in their own places, correct way up. Shift or turn them very slightly.', labels: allCorrect(), tags: {}, check: [] } : mixedShot(r));
+      return done();
+    }
     if (type === 'focus') {
       for (let i = 0; i < 6; i++) shots.push(twoHands(r));
       pickN(r, HAND_PAIRS, 6).forEach((pr, i) => shots.push(handShot(pr, HOWS[i % HOWS.length])));
@@ -246,7 +313,7 @@ S.collect = (() => {
     const sessions = {};
     for (const s of shots) (sessions[s.session] = sessions[s.session] || []).push(s);
     const nums = Object.keys(sessions).map(Number).sort((a, b) => a - b);
-    const next = nums.length ? Math.max(...nums) + 1 : 1;
+    const next = nums.length ? Math.max(...nums) + 1 : 2;
     const totals = Object.fromEntries(CATS.map(c => [c, { train: 0, validation: 0, test: 0 }]));
     for (const s of shots) for (const z of ZONES) if (s.labels[z]) totals[s.labels[z]][s.split]++;
 
@@ -267,7 +334,7 @@ S.collect = (() => {
     const note = h('input', { type: 'text', id: 'cs-note', placeholder: 'Anything unusual' });
 
     container.replaceChildren(
-      h('p', null, 'Each session is 25 photos. The app tells you what to change for the session, how to arrange the pieces for each photo, and saves the 5 zone pictures already named. Sessions 1 to 12 and 17 onward are for training, 13 to 15 for checking (validation), and 16 is the final test day. Sessions 17 and 20 are hands-and-overlaps sessions; 18 and 21 are flipped-and-upside-down sessions.'),
+      h('p', null, 'Five sessions in total. Session 1 is done. Sessions 2, 3 and 4 are training (40 photos each); session 5 is the final test (30 photos) on another day with the real setup. Each photo changes several pieces at once, so read every line of the instruction.'),
       h('section', null, h('h2', null, 'Start a session'),
         h('form', { class: 'sform', onsubmit: e => {
           e.preventDefault();
@@ -302,9 +369,9 @@ S.collect = (() => {
           h('thead', null, h('tr', null, ['Session', 'Use for', 'Photos', 'Lighting', 'Camera', ''].map(x => h('th', null, x)))),
           h('tbody', null, nums.map(n => {
             const list = sessions[n], f = list[0];
-            return h('tr', null, h('td', null, `Session ${n}`), h('td', null, f.split), h('td', { class: 'num' }, `${list.length} / 25`), h('td', null, f.lighting), h('td', null, f.camera),
+            return h('tr', null, h('td', null, `Session ${n}`), h('td', null, f.split), h('td', { class: 'num' }, `${list.length} / ${plan(n).length}`), h('td', null, f.lighting), h('td', null, f.camera),
               h('td', null, h('div', { class: 'row wrap' },
-                list.length < 25 ? h('button', { class: 'btn small', type: 'button', onclick: () => { const a = { session: n, split: f.split, lighting: f.lighting, camera: f.camera, device: f.device, hands: f.hands, note: f.note }; setActive(a); shoot(container, a); } }, 'Continue') : null,
+                list.length < plan(n).length ? h('button', { class: 'btn small', type: 'button', onclick: () => { const a = { session: n, split: f.split, lighting: f.lighting, camera: f.camera, device: f.device, hands: f.hands, note: f.note }; setActive(a); shoot(container, a); } }, 'Continue') : null,
                 h('button', { class: 'btn small', type: 'button', onclick: () => exportSession(n) }, 'Download zip'),
                 h('button', { class: 'btn small danger', type: 'button', onclick: async () => {
                   if (!(await S.ui.confirmBox(`Delete session ${n}?`, `Its ${list.length} photos will be removed from this device. Download the zip first if you need it.`, 'Delete', 'Cancel'))) return;
@@ -348,12 +415,12 @@ S.collect = (() => {
       review.replaceChildren();
       const s = shotSpec();
       if (!s) {
-        title.textContent = `Session ${a.session} (${a.split}): all 25 photos done`;
+        title.textContent = `Session ${a.session} (${a.split}): all ${shots.length} photos done`;
         instr.textContent = 'This session is complete. Add extra photos of any kind, or tap Finish for now.';
         captureBtn.disabled = true;
         return;
       }
-      title.textContent = `Session ${a.session} (${a.split}) — ${s.extra ? 'extra photo' : `photo ${s.n} of 25`}: ${s.kind}`;
+      title.textContent = `Session ${a.session} (${a.split}) — ${s.extra ? 'extra photo' : `photo ${s.n} of ${shots.length}`}: ${s.kind}`;
       instr.textContent = s.text;
       captureBtn.disabled = lastFound.length !== 4;
     }
@@ -414,7 +481,7 @@ S.collect = (() => {
       const layout = Object.assign({}, S.BOARD, { pxPerCm: 12 });
       const board = S.aruco.straighten(full, found, layout);
       if (!board) { S.ui.toast('A marker was lost at the moment of capture. Hold still and try again.'); return; }
-      current = { s, full, found, board, layout, labels: Object.assign({}, s.labels), crops: {} };
+      current = { s, full, found, board, layout, labels: Object.assign({}, s.labels), tags: Object.assign({}, s.tags || {}), crops: {} };
       for (const z of ZONES) current.crops[z] = S.aruco.zoneCrop(board, S.BOARD.zones[z], 224, layout);
       captureBtn.disabled = true;
       showReview();
@@ -424,12 +491,15 @@ S.collect = (() => {
       const c = current;
       const figs = ZONES.map(z => {
         const sel = h('select', { 'data-zone': z, onchange: () => { c.labels[z] = sel.value; fig.classList.remove('check'); } }, CATS.map(cat => h('option', { value: cat, selected: c.labels[z] === cat ? true : null }, CAT_NAME[cat])));
-        const fig = h('figure', { class: c.s.check.includes(z) ? 'check' : '' }, c.crops[z], h('figcaption', null, h('strong', null, `${ZN(z)} zone`), sel));
+        c.tags[z] = new Set(c.tags[z] || []);
+        const tag = (k, label) => h('label', { class: 'tagbox' }, h('input', { type: 'checkbox', checked: c.tags[z].has(k) ? true : null, onchange: e => { if (e.target.checked) c.tags[z].add(k); else c.tags[z].delete(k); } }), label);
+        const fig = h('figure', { class: c.s.check.includes(z) ? 'check' : '' }, c.crops[z], h('figcaption', null, h('strong', null, `${ZN(z)} zone`), sel,
+          h('div', { class: 'tags' }, tag('flipped', 'also flipped'), tag('upside_down', 'also upside down'), tag('wrong_place', 'wrong piece'))));
         return fig;
       });
       review.replaceChildren(
         h('h3', null, 'Check the names, then save'),
-        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye. Hand: any part of a hand, finger or sleeve is over the zone. Partial: a piece is about a quarter or more outside its box, or two pieces share the box. Flipped: a lung or the heart with its back side up. Upside down: a piece turned so its top points down. The diaphragm with its other side up but the right way round is just Diaphragm. Otherwise name the piece that fills the zone, or Empty.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
+        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye. Pick the main name by priority: Hand, then Partial, then Flipped, then Upside down, then the piece. Tick "also" for anything else true (for example Partial and also flipped). Hand: any part of a hand, finger or sleeve is over the zone. Partial: a piece is about a quarter or more outside its box, or two pieces share the box. Flipped: a lung or the heart with its back side up. Upside down: a piece turned so its top points down. The diaphragm with its other side up but the right way round is just Diaphragm. Otherwise name the piece that fills the zone, or Empty.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
         h('div', { class: 'cs-crops' }, figs),
         h('div', { class: 'row wrap' },
           h('button', { class: 'btn primary big', type: 'button', onclick: save }, 'Save and next'),
@@ -452,7 +522,7 @@ S.collect = (() => {
       const rec = {
         id: c.s.extra ? `${shotId(a.session, 99)}-${S.util.rand4()}` : shotId(a.session, n),
         session: a.session, n, split: a.split, kind: c.s.kind, extra: !!c.s.extra, instruction: c.s.text,
-        labels: c.labels, planned: c.s.labels, lighting: a.lighting, camera: a.camera, device: a.device, hands: a.hands, note: a.note,
+        labels: c.labels, tags: Object.fromEntries(ZONES.map(z => [z, [...(c.tags[z] || [])]])), planned: c.s.labels, lighting: a.lighting, camera: a.camera, device: a.device, hands: a.hands, note: a.note,
         markers: Object.fromEntries(c.found.map(f => [f.id, f.centre.map(v => Math.round(v * 10) / 10)])),
         frame_w: c.full.width, frame_h: c.full.height, created_at: new Date().toISOString(),
         frame: await toBlob(c.full, 0.85), crops: {}
@@ -486,8 +556,8 @@ S.collect = (() => {
   /* ---------- Export ---------- */
   const bytes = async b => new Uint8Array(await b.arrayBuffer());
   const csvRow = vals => vals.map(v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; }).join(',');
-  const HEAD = ['photo', 'session', 'use_for', 'kind', 'zone', 'category', 'changed_by_you', 'lighting', 'camera', 'device', 'hands', 'instruction'];
-  const rows = s => ZONES.map(z => csvRow([s.id, s.session, s.split, s.kind, z, s.labels[z], s.labels[z] !== s.planned[z] ? 'yes' : '', s.lighting, s.camera, s.device, s.hands, s.instruction]));
+  const HEAD = ['photo', 'session', 'use_for', 'kind', 'zone', 'category', 'also', 'changed_by_you', 'lighting', 'camera', 'device', 'hands', 'instruction'];
+  const rows = s => ZONES.map(z => csvRow([s.id, s.session, s.split, s.kind, z, s.labels[z], ((s.tags || {})[z] || []).join(' '), s.labels[z] !== s.planned[z] ? 'yes' : '', s.lighting, s.camera, s.device, s.hands, s.instruction]));
 
   async function exportSession(n) {
     const list = (await allShots()).filter(s => s.session === n);
