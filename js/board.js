@@ -5,6 +5,7 @@ window.S = window.S || {};
 S.boardCheck = (() => {
   const { h } = S.util;
   const NAMES = { 31: 'Top left (31)', 115: 'Top right (115)', 261: 'Bottom left (261)', 161: 'Bottom right (161)' };
+  const AI_NAME = { empty: 'Empty', right_lung: 'Right lung', left_lung: 'Left lung', heart: 'Heart', trachea: 'Windpipe', diaphragm: 'Diaphragm', flipped: 'Flipped', upside_down: 'Upside down', partial: 'Partial', hand: 'Hand' };
   const ZONE_COLOURS = { rlung: '#E5243B', llung: '#C2185B', windpipe: '#E08A00', heart: '#7B1FA2', diaphragm: '#1565C0' };
 
   function view() {
@@ -43,7 +44,8 @@ S.boardCheck = (() => {
         ctx.fillStyle = '#18C964'; ctx.fillText(String(f.id), f.centre[0] + 4, f.centre[1] - 4);
       }
       show(found, ms);
-      const board = S.aruco.straighten(work, found);
+      const layout = Object.assign({}, S.BOARD, { pxPerCm: 12 });
+      const board = S.aruco.straighten(work, found, layout);
       if (!board) {
         status.className = 'camstatus bad';
         status.textContent = `${found.length} of 4 markers found. Make sure all 4 are in the picture, flat and not covered.`;
@@ -55,11 +57,20 @@ S.boardCheck = (() => {
       const bctx = board.getContext('2d');
       bctx.lineWidth = 3; bctx.font = 'bold 16px system-ui, sans-serif';
       /* Cut the crops first, so the zone outlines drawn next don't show up in them */
-      const cropEls = Object.entries(S.BOARD.zones).map(([k, z]) => h('figure', null, S.aruco.zoneCrop(board, z, 160), h('figcaption', null, S.ORGAN_NAME[k] || k)));
+      const ai = S.zoneAI.model;
+      const cropEls = Object.entries(S.BOARD.zones).map(([k, z]) => {
+        const c = S.aruco.zoneCrop(board, z, 224, layout);
+        let guess = null;
+        if (ai) {
+          const g = S.zoneAI.predict(c);
+          guess = h('span', { class: `aiguess ${g.conf < 0.6 ? 'unsure' : ''}` }, `AI: ${AI_NAME[g.name] || g.name} ${Math.round(g.conf * 100)}%`);
+        }
+        return h('figure', null, c, h('figcaption', null, S.ORGAN_NAME[k] || k, guess));
+      });
       for (const [k, z] of Object.entries(S.BOARD.zones)) {
         const [x, y] = board.toBoard(z.x, z.y);
         bctx.strokeStyle = ZONE_COLOURS[k] || '#000';
-        bctx.strokeRect(x, y, z.w * S.BOARD.pxPerCm, z.h * S.BOARD.pxPerCm);
+        bctx.strokeRect(x, y, z.w * layout.pxPerCm, z.h * layout.pxPerCm);
         bctx.fillStyle = ZONE_COLOURS[k] || '#000';
         bctx.fillText(S.ORGAN_NAME[k] || k, x + 4, y + 18);
       }
@@ -111,6 +122,8 @@ S.boardCheck = (() => {
       c.toBlob(b => S.util.download(`board-straightened-${S.util.stamp()}.png`, b), 'image/png');
     } }, 'Save straightened board');
 
+    const aiNote = h('p', { class: 'muted small' }, 'Loading the AI...');
+    S.zoneAI.load().then(m => { aiNote.textContent = `AI model from ${m.version}, trained on session${(m.info.trained_on || []).length > 1 ? 's' : ''} ${(m.info.trained_on || []).join(', ')} (${m.info.pictures} pictures). Early model: expect mistakes until more sessions are in.`; }).catch(() => { aiNote.textContent = 'No AI model yet.'; });
     return h('div', { class: 'boardcheck' },
       h('p', null, 'Hold the tablet where it will sit in the station. Every marker found turns green. The straightened board shows the 5 zones; each square underneath is what the AI will look at.'),
       h('div', { class: 'row wrap' }, startBtn, stopBtn, fileBtn, saveBtn, file),
@@ -118,7 +131,8 @@ S.boardCheck = (() => {
       h('div', { class: 'bc-grid' },
         h('section', null, h('h2', null, 'Camera picture'), live),
         h('section', null, h('h2', null, 'Straightened board'), flat)),
-      h('h2', null, 'What the AI will see in each zone'),
+      h('h2', null, 'What the AI sees in each zone'),
+      aiNote,
       crops);
   }
 
