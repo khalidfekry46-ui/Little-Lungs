@@ -49,12 +49,23 @@ def derive(zone, cat, tags, piece=None):
 PIECE_CAT_ANY = {"rlung": "right_lung", "llung": "left_lung", "heart": "heart", "windpipe": "trachea", "diaphragm": "diaphragm"}
 
 
+def excluded():
+    """Photo IDs listed in exclude.txt (one per line, # for notes) are never used."""
+    path = os.path.join(os.path.dirname(__file__), "exclude.txt")
+    if not os.path.exists(path):
+        return set()
+    return {ln.split("#")[0].strip() for ln in open(path) if ln.split("#")[0].strip()}
+
+
 def load(zdir):
     photos = []  # dicts: id, session, split, labels, tags, crops, frame
+    skip = excluded()
     for path in sorted(glob.glob(os.path.join(zdir, "*.zip"))):
         rows, frames, crops = read_session_zip(path)
         by = {}
         for x in rows:
+            if x["photo"] in skip:
+                continue
             d = by.setdefault(x["photo"], {"id": x["photo"], "session": int(x["session"]), "split": x["use_for"], "labels": {}, "tags": {}})
             tags = (x.get("also") or "").split()
             d["labels"][x["zone"]] = derive(x["zone"], x["category"], tags, x.get("piece") or None)
@@ -156,6 +167,8 @@ def main():
     ap.add_argument("--cv", action="store_true", help="only one session so far: hold out whole photos in turn")
     a = ap.parse_args()
     photos = load(a.zips)
+    if excluded():
+        print(f"Left out on purpose: {', '.join(sorted(excluded()))}")
     print(f"{len(photos)} photos from sessions {sorted(set(p['session'] for p in photos))}")
     train = [p for p in photos if p["split"] == "train"]
     val = [p for p in photos if p["split"] == "validation"]

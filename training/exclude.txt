@@ -1,0 +1,2 @@
+# Photos never used for training or testing, with the reason.
+S02-03  # windpipe was upside down but saved as correct (reference photo)
