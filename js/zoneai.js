@@ -1,10 +1,13 @@
 /* The zone AI: looks at one 224 x 224 zone picture and names it (one of 10 categories).
-   Features and network must match training/common.py and training/train.py exactly.
-   The model file (model/zone-model.json) is made by training/train.py and stored offline with the app. */
+   Main model: MobileNetV2 (already trained on millions of photos, runs on the tablet's graphics chip through
+   ONNX Runtime Web) turns the picture into 1280 numbers; a small network trained on our board names it
+   (model/zone-head.json). Fallback, if the graphics chip can't run it: hand-made picture features and a small
+   network (model/zone-model.json).
+   Features and networks must match training/common.py and training/train.py exactly. */
 window.S = window.S || {};
 
 S.zoneAI = (() => {
-  let model = null, loading = null;
+  let model = null, loading = null, session = null, ortLoad = null;
   const G = 56, CELL = 8, BINS = 9, CG = 14;
 
   function b64ToInt8(s) {
@@ -17,22 +20,60 @@ S.zoneAI = (() => {
     for (let r = 0; r < w.rows; r++) { const s = w.scale[r]; for (let c = 0; c < w.cols; c++) M[r * w.cols + c] = q[r * w.cols + c] * s; }
     return { M, rows: w.rows, cols: w.cols };
   }
+  function head(d) {
+    return { classes: d.classes, version: d.version, info: d, backbone: d.backbone || 'hand', mu: Float32Array.from(d.mu), sd: Float32Array.from(d.sd),
+      W1: deq(d.W1), b1: Float32Array.from(d.b1), W2: deq(d.W2), b2: Float32Array.from(d.b2) };
+  }
+  function loadScript(src) {
+    return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('Could not load ' + src)); document.head.appendChild(s); });
+  }
 
-  async function load(url = 'model/zone-model.json') {
+  async function loadMobileNet() {
+    const res = await fetch('model/zone-head.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('No MobileNet head');
+    const d = await res.json();
+    if (!window.ort) { ortLoad = ortLoad || loadScript('js/vendor/ort.min.js'); await ortLoad; }
+    window.ort.env.logLevel = 'error';
+    session = await window.ort.InferenceSession.create(d.backbone_file || 'model/mobilenet-feat.onnx', { executionProviders: ['webgl'] });
+    const m = head(d);
+    /* Warm-up: the first run compiles the graphics programs */
+    const blank = document.createElement('canvas'); blank.width = blank.height = 224;
+    const bctx = blank.getContext('2d'); bctx.fillStyle = '#808080'; bctx.fillRect(0, 0, 224, 224);
+    const t0 = performance.now();
+    await mnetFeatures(blank, m);
+    m.warmMs = performance.now() - t0;
+    return m;
+  }
+
+  async function load() {
     if (model) return model;
     if (loading) return loading;
     loading = (async () => {
-      const res = await fetch(url, { cache: 'no-cache' });
-      if (!res.ok) throw new Error('No AI model file yet');
-      const d = await res.json();
-      model = { classes: d.classes, version: d.version, info: d, mu: Float32Array.from(d.mu), sd: Float32Array.from(d.sd),
-        W1: deq(d.W1), b1: Float32Array.from(d.b1), W2: deq(d.W2), b2: Float32Array.from(d.b2) };
+      try { model = await loadMobileNet(); }
+      catch (e) {
+        console.warn('[zoneAI] MobileNet not available, using the small model:', e && e.message);
+        session = null;
+        const res = await fetch('model/zone-model.json', { cache: 'no-cache' });
+        if (!res.ok) throw new Error('No AI model file yet');
+        model = head(await res.json());
+        model.fallbackReason = e && e.message;
+      }
       return model;
     })();
     try { return await loading; } finally { loading = null; }
   }
 
-  /* Same numbers as training/common.py features() */
+  /* MobileNet: picture -> 1280 numbers (same as training/common.py mnet_features) */
+  async function mnetFeatures(canvas, m) {
+    const px = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, 224, 224).data;
+    const { mean, std } = m.info.input || { mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225] };
+    const N = 224 * 224, x = new Float32Array(3 * N);
+    for (let i = 0; i < N; i++) for (let c = 0; c < 3; c++) x[c * N + i] = (px[i * 4 + c] / 255 - mean[c]) / std[c];
+    const out = await session.run({ [session.inputNames[0]]: new window.ort.Tensor('float32', x, [1, 3, 224, 224]) });
+    return Float32Array.from(out[session.outputNames[0]].data);
+  }
+
+  /* Hand-made features (same numbers as training/common.py features()) */
   function features(canvas) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const px = ctx.getImageData(0, 0, 224, 224).data;
@@ -83,11 +124,9 @@ S.zoneAI = (() => {
     return Float32Array.from(out);
   }
 
-  /* Returns { name, conf, probs:{name: p} } */
-  function predict(canvas) {
-    if (!model) throw new Error('Model not loaded');
-    const f = features(canvas);
-    const { W1, b1, W2, b2, mu, sd } = model;
+  /* The small trained network on top of the features */
+  function classify(f, m) {
+    const { W1, b1, W2, b2, mu, sd } = m;
     const z = new Float32Array(f.length);
     for (let i = 0; i < f.length; i++) z[i] = (f[i] - mu[i]) / sd[i];
     const hdn = new Float32Array(W1.rows);
@@ -107,9 +146,22 @@ S.zoneAI = (() => {
     const p = Array.from(logit, v => { const e = Math.exp(v - mx); sum += e; return e; });
     const probs = {};
     let best = 0;
-    p.forEach((v, i) => { probs[model.classes[i]] = v / sum; if (v > p[best]) best = i; });
-    return { name: model.classes[best], conf: p[best] / sum, probs };
+    p.forEach((v, i) => { probs[m.classes[i]] = v / sum; if (v > p[best]) best = i; });
+    return { name: m.classes[best], conf: p[best] / sum, probs };
   }
 
-  return { load, predict, features, get model() { return model; } };
+  /* Returns a promise of { name, conf, probs:{name: p} } */
+  async function predict(canvas) {
+    if (!model) throw new Error('Model not loaded');
+    const f = model.backbone === 'mobilenetv2' ? await mnetFeatures(canvas, model) : features(canvas);
+    return classify(f, model);
+  }
+  /* Several zone pictures, one after the other (the graphics chip runs one at a time) */
+  async function predictMany(canvases) {
+    const out = [];
+    for (const c of canvases) out.push(await predict(c));
+    return out;
+  }
+
+  return { load, predict, predictMany, features, get model() { return model; } };
 })();

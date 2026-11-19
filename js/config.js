@@ -159,7 +159,7 @@ S.TIMING = {
   returnMs: 10000,
   passageMs: 300000,
   restMs: 15000,
-  stableMs: 1000,
+  stableMs: 1500,
   handNagMs: 5000,
   breathWaitMs: 1500,
   maxExtraBreaths: 2

@@ -6,6 +6,7 @@ Mirrors the app exactly where it matters:
 - features: the same numbers js/zoneai.js computes in the browser (keep the two in step)
 """
 import json
+import os
 import zipfile
 import io
 import csv
@@ -143,3 +144,27 @@ def read_session_zip(path):
             photo, zone = base.rsplit("-", 1)
             crops[(photo, zone)] = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return rows, frames, crops
+
+
+# ---------------- MobileNetV2 features (must match js/zoneai.js) ----------------
+# A network already trained on millions of photos (ImageNet). Only its last part is replaced:
+# each zone picture becomes 1280 numbers, and the small network in train.py learns from those.
+MNET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "model", "mobilenet-feat.onnx")
+MNET_MEAN = [0.485, 0.456, 0.406]
+MNET_STD = [0.229, 0.224, 0.225]
+_mnet = None
+
+
+def mnet_features(rgb_list):
+    """rgb_list: uint8 arrays (224, 224, 3) RGB. Returns float32 (n, 1280)."""
+    global _mnet
+    if _mnet is None:
+        import onnxruntime as ort
+        so = ort.SessionOptions(); so.log_severity_level = 3
+        _mnet = ort.InferenceSession(MNET_PATH, so)
+    m, s = np.float32(MNET_MEAN), np.float32(MNET_STD)
+    out = np.zeros((len(rgb_list), 1280), np.float32)
+    for i, img in enumerate(rgb_list):
+        x = ((img.astype(np.float32) / 255 - m) / s).transpose(2, 0, 1)[None]
+        out[i] = _mnet.run(None, {"input": x})[0].reshape(-1)
+    return out

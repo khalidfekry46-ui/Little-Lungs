@@ -26,3 +26,14 @@ empty, right_lung, left_lung, heart, trachea, diaphragm, flipped, upside_down, p
   stored as bytes with a scale per row. Sessions marked validation (4) and test (5) are only scored, never trained on.
 
 Accuracy claims must come from session 5 only.
+
+## Models (since version 1.8.0)
+
+- Main: `python3 train.py --zips DIR --synth 16` (default `--backbone mnet`). MobileNetV2
+  (`model/mobilenet-feat.onnx`, ImageNet weights, classifier removed) turns each zone picture into 1280 numbers;
+  a small network trained here names it. Saved to `model/zone-head.json`. The app runs MobileNet on the
+  tablet's graphics chip with ONNX Runtime Web (`js/vendor/ort.min.js`, WebGL, no download needed).
+- Fallback: `python3 train.py --zips DIR --synth 16 --backbone hand` -> `model/zone-model.json`.
+  Used only if the graphics chip can't run MobileNet.
+- Fair check: add `--xsess` (train on each session alone, test on the others).
+- Bad photos: add the photo ID to `exclude.txt`.

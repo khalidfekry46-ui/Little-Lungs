@@ -19,7 +19,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import confusion_matrix
 
 sys.path.insert(0, os.path.dirname(__file__))
-from common import ZONES, CATS, FEAT_LEN, features, read_session_zip, straighten  # noqa: E402
+from common import ZONES, CATS, FEAT_LEN, features, mnet_features, MNET_MEAN, MNET_STD, read_session_zip, straighten  # noqa: E402
 import synth  # noqa: E402
 
 
@@ -77,25 +77,33 @@ def load(zdir):
     return photos
 
 
+BACKBONE = "hand"  # "hand": hand-made features (common.features); "mnet": MobileNetV2 features
+
+
 def build(photos, synth_per_zone, seed):
-    X, y, src = [], [], []
+    imgs, y, src = [], [], []
     r = np.random.default_rng(seed)
     for p in photos:
         for z in ZONES:
             if z in p["crops"]:
-                X.append(features(p["crops"][z])); y.append(p["labels"][z]); src.append("real")
+                imgs.append(p["crops"][z]); y.append(p["labels"][z]); src.append("real")
         if synth_per_zone and p["frame"] is not None:
             board = straighten(p["frame"])
             if board is None:
                 continue
             for img, name, how in synth.make(board, p["labels"], p["tags"], r, per_zone=synth_per_zone):
-                X.append(features(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))); y.append(name); src.append(how)
-    return np.array(X, np.float32), np.array(y), np.array(src)
+                imgs.append(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)); y.append(name); src.append(how)
+    if BACKBONE == "mnet":
+        X = mnet_features(imgs) if imgs else np.zeros((0, 1280), np.float32)
+    else:
+        X = np.array([features(i) for i in imgs], np.float32)
+    return X, np.array(y), np.array(src)
 
 
 def fit(X, y, seed=0):
     mu, sd = X.mean(0), X.std(0) + 1e-4
-    clf = MLPClassifier(hidden_layer_sizes=(128,), alpha=1e-3, batch_size=128, learning_rate_init=1e-3,
+    hidden, alpha = ((256,), 1.0) if BACKBONE == "mnet" else ((128,), 1e-3)
+    clf = MLPClassifier(hidden_layer_sizes=hidden, alpha=alpha, batch_size=128, learning_rate_init=1e-3,
                         max_iter=80, early_stopping=True, validation_fraction=0.1, n_iter_no_change=8, random_state=seed)
     clf.fit((X - mu) / sd, y)
     return clf, mu, sd
@@ -132,7 +140,8 @@ def export(model, path, extra=None):
     b1, b2 = clf.intercepts_
     data = {
         "version": time.strftime("%Y-%m-%d %H:%M"),
-        "classes": list(clf.classes_), "feat_len": FEAT_LEN,
+        "classes": list(clf.classes_), "feat_len": int(mu.shape[0]),
+        "backbone": "mobilenetv2" if BACKBONE == "mnet" else "hand",
         "mu": np.round(mu, 5).tolist(), "sd": np.round(sd, 5).tolist(),
         "W1": q8(W1.T), "b1": np.round(b1, 5).tolist(),
         "W2": q8(W2.T), "b2": np.round(b2, 5).tolist(),
@@ -163,9 +172,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--zips", required=True)
     ap.add_argument("--synth", type=int, default=12)
-    ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "..", "model", "zone-model.json"))
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--backbone", choices=["hand", "mnet"], default="mnet", help="mnet: MobileNetV2 features (better); hand: the small fallback model")
+    ap.add_argument("--xsess", action="store_true", help="train on each session alone and test on the others (fair check)")
     ap.add_argument("--cv", action="store_true", help="only one session so far: hold out whole photos in turn")
     a = ap.parse_args()
+    global BACKBONE
+    BACKBONE = a.backbone
+    if a.out is None:
+        a.out = os.path.join(os.path.dirname(__file__), "..", "model", "zone-head.json" if BACKBONE == "mnet" else "zone-model.json")
     photos = load(a.zips)
     if excluded():
         print(f"Left out on purpose: {', '.join(sorted(excluded()))}")
@@ -173,6 +188,15 @@ def main():
     train = [p for p in photos if p["split"] == "train"]
     val = [p for p in photos if p["split"] == "validation"]
     test = [p for p in photos if p["split"] == "test"]
+
+    if a.xsess:
+        sess = sorted(set(p["session"] for p in train))
+        for s in sess:
+            tr = [p for p in train if p["session"] == s]
+            te = [p for p in train if p["session"] != s]
+            Xtr, ytr, _ = build(tr, a.synth, s)
+            Xte, yte, _ = build(te, 0, 0)
+            report(yte, predict(fit(Xtr, ytr), Xte)[0], f"Trained on session {s} only, tested on sessions {[q for q in sess if q != s]}")
 
     if a.cv:
         r = np.random.default_rng(0)
@@ -197,7 +221,11 @@ def main():
         if part:
             Xv, yv, _ = build(part, 0, 0)
             report(yv, predict(m, Xv)[0], name)
-    note = {"trained_on": sorted(set(p["session"] for p in train)), "pictures": int(len(y)), "real_pictures": int((src == "real").sum())}
+    if BACKBONE == "mnet":
+        note_in = {"input": {"size": 224, "mean": MNET_MEAN, "std": MNET_STD}, "backbone_file": "model/mobilenet-feat.onnx"}
+    else:
+        note_in = {}
+    note = {**note_in, "trained_on": sorted(set(p["session"] for p in train)), "pictures": int(len(y)), "real_pictures": int((src == "real").sum())}
     export(m, a.out, note)
     same = (predict_q(a.out, X[:2000]) == predict(m, X[:2000])[0]).mean()
     print(f"Byte model agrees with the full model on {same:.3%} of training pictures")

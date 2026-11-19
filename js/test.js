@@ -407,7 +407,7 @@ S.test = (() => {
     build.response_ms = now() - Math.max(markStart, o.handClearAt || 0);
     S.ORGANS.forEach(org => {
       const z = o.zones[org] || { cls: 'empty', conf: 1 };
-      const verdict = z.cls === org ? (z.conf >= thr ? 'correct' : 'cant_verify') : 'wrong';
+      const verdict = z.cls === org ? (z.conf >= thr ? 'correct' : 'cant_verify') : (z.cls === 'hand' || z.cls === 'partial') ? 'cant_verify' : 'wrong';
       const p = { organ: org, ai_verdict: verdict, seenCls: z.cls, conf: z.conf };
       if (S.vision.kind === 'sim') {
         const t = S.vision.truth[org];

@@ -8,6 +8,8 @@ window.S = window.S || {};
 S.judge = function (target, zones, thr) {
   const isLung = o => o === 'rlung' || o === 'llung';
   const z = zones[target] || { cls: 'empty', conf: 1 };
+  /* A piece half outside its box, or a hand: not finished yet, keep waiting */
+  if (z.cls === 'partial' || z.cls === 'hand') return null;
   const elsewhere = S.ORGANS.find(o => o !== target && zones[o] && (zones[o].cls === target || zones[o].cls === 'rot:' + target));
   if (z.cls === target && !elsewhere) {
     return { verdict: z.conf >= thr ? 'correct' : 'cant_verify', error: null, seenZone: target, seenCls: z.cls, conf: z.conf };
@@ -141,14 +143,33 @@ class VisionSim {
   }
 }
 
+/* Live camera: finds the 4 markers about 4 times a second, straightens the board, and watches for movement.
+   The AI only names the zones once the board has been still for a moment, so a moving hand or sleeve is never
+   judged. If the AI sees a hand resting on a zone, or a marker gets covered, the observation says hand = true:
+   the test then waits and asks the student to move their hand away, instead of marking anything wrong. */
+const AI_TO_CLS = { right_lung: 'rlung', left_lung: 'llung', heart: 'heart', trachea: 'windpipe', diaphragm: 'diaphragm', empty: 'empty', partial: 'partial', hand: 'hand' };
 class VisionLive {
   constructor() {
     this.kind = 'live';
     this.stream = null;
     this.video = null;
-    this.model = null; /* plug the trained model in here (see docs/what-is-waiting.md) */
+    this.running = false;
+    this.work = document.createElement('canvas');
+    this.prev = null;            /* small grey board from the last frame, to spot movement */
+    this.lastChange = 0;         /* last time something moved on the board */
+    this.handClearAt = 0;
+    this.hand = false;
+    this.markersHidden = false;
+    this.seenBoard = false;
+    this.found = 0;
+    this.light = null;
+    this.zones = Object.fromEntries(S.ORGANS.map(o => [o, { cls: 'empty', conf: 0 }]));
+    this.aiFrameAt = -1;         /* when the frame the AI last looked at was taken */
+    this.aiBusy = false;
+    this.aiHand = false;
+    this.settleMs = 700;         /* still this long before the AI looks */
   }
-  stop() { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+  stop() { this.running = false; if (this.stream) this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
   async start(facing) {
     if (this.stream) return true;
     this.error = null;
@@ -156,21 +177,123 @@ class VisionLive {
     if (!d.ok) { this.error = d.message; return false; }
     try {
       const f = facing || S.settings.get().cameraFacing || 'environment';
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: f, width: { ideal: 1920 } }, audio: false });
+      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: f, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       this.video = document.createElement('video');
       this.video.playsInline = true;
       this.video.muted = true;
       this.video.srcObject = this.stream;
       await this.video.play();
-      return true;
     } catch (e) { this.error = e && e.name === 'NotAllowedError' ? 'Camera permission was refused. Set Camera to Allow in the site settings.' : `The camera did not start (${e && e.name}).`; return false; }
+    S.zoneAI.load().catch(() => {});
+    this.running = true;
+    this.loop();
+    return true;
+  }
+  async loop() {
+    while (this.running) {
+      try { this.tick(); } catch (e) { console.warn('[vision]', e); }
+      await S.util.realSleep(250);
+    }
+  }
+  setHand(on) {
+    if (this.hand && !on) this.handClearAt = S.run.now();
+    if (on !== this.hand) this.lastChange = S.run.now();
+    this.hand = on;
+  }
+  tick() {
+    const v = this.video;
+    if (!v || !v.videoWidth) return;
+    const now = S.run.now();
+    const k = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+    this.work.width = Math.round(v.videoWidth * k); this.work.height = Math.round(v.videoHeight * k);
+    const ctx = this.work.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(v, 0, 0, this.work.width, this.work.height);
+    const found = S.aruco.detect(ctx.getImageData(0, 0, this.work.width, this.work.height));
+    this.found = found.length;
+    if (found.length < 4) {
+      /* A marker that was visible is now covered: almost always a hand or arm */
+      this.markersHidden = this.seenBoard;
+      this.setHand(this.markersHidden || this.aiHand);
+      this.prev = null;
+      return;
+    }
+    this.seenBoard = true;
+    this.markersHidden = false;
+    /* Movement: compare a small straightened board with the last one */
+    const small = Object.assign({}, S.BOARD, { pxPerCm: 3 });
+    const sb = S.aruco.straighten(this.work, found, small);
+    if (!sb) return;
+    const px = sb.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, sb.width, sb.height).data;
+    const g = new Float32Array(px.length / 4);
+    let sum = 0;
+    for (let i = 0; i < g.length; i++) { g[i] = (px[i * 4] * 77 + px[i * 4 + 1] * 150 + px[i * 4 + 2] * 29) / 256; sum += g[i]; }
+    this.light = sum / g.length;
+    if (this.prev && this.prev.length === g.length) {
+      let md = 0;
+      for (let i = 0; i < g.length; i++) md += g[i] - this.prev[i];
+      md /= g.length; /* whole-picture brightness shift (camera exposure), not movement */
+      let moved = 0;
+      for (let i = 0; i < g.length; i++) if (Math.abs(g[i] - this.prev[i] - md) > 25) moved++;
+      if (moved / g.length > 0.004) this.lastChange = now;
+    } else this.lastChange = now;
+    this.prev = g;
+    this.setHand(this.aiHand);
+    /* Still long enough, and the AI has not looked since the last change: let it look now */
+    if (!this.aiBusy && S.zoneAI.model && now - this.lastChange >= this.settleMs && this.aiFrameAt < this.lastChange + this.settleMs) {
+      const layout = Object.assign({}, S.BOARD, { pxPerCm: 12 });
+      const board = S.aruco.straighten(this.work, found, layout);
+      if (!board) return;
+      const crops = S.ORGANS.map(o => S.aruco.zoneCrop(board, S.BOARD.zones[o], 224, layout));
+      const frameAt = now, changeAt = this.lastChange;
+      this.aiBusy = true;
+      S.zoneAI.predictMany(crops).then(gs => {
+        if (this.lastChange !== changeAt) return; /* the board moved while the AI was looking: throw it away */
+        const zones = {};
+        let hand = false;
+        S.ORGANS.forEach((o, i) => {
+          const r = gs[i];
+          const cls = r.name === 'flipped' || r.name === 'upside_down' ? 'rot:' + o : AI_TO_CLS[r.name] || 'empty';
+          zones[o] = { cls, conf: r.conf, ai: r.name };
+          if (r.name === 'hand' && r.conf >= 0.5) hand = true;
+        });
+        this.zones = zones;
+        this.aiHand = hand;
+        this.aiFrameAt = frameAt;
+        this.setHand(hand || this.markersHidden);
+      }).catch(e => console.warn('[vision] AI', e)).finally(() => { this.aiBusy = false; });
+    }
   }
   async selfTest() {
-    if (!this.model) return { ok: false, detail: 'Vision model not installed yet' };
-    return { ok: true, detail: 'Model loaded' };
+    try {
+      const m = await S.zoneAI.load();
+      const c = document.createElement('canvas'); c.width = c.height = 224;
+      const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, 224, 224);
+      const t0 = performance.now();
+      await S.zoneAI.predict(c);
+      const ms = Math.round(performance.now() - t0);
+      return { ok: true, detail: `${m.backbone === 'mobilenetv2' ? 'MobileNet AI' : 'Small fallback AI'} loaded (${ms} ms per zone)` };
+    } catch (e) { return { ok: false, detail: 'The AI model did not load: ' + (e && e.message) }; }
   }
-  async boardView() { return { markers: 0, tilt: 'unknown', light: 'unknown', detail: 'Marker finder not installed yet' }; }
-  read() { return { ready: false, hand: false, stableMs: 0, handClearAt: 0, zones: {} }; }
+  /* Waits up to 8 s for the markers and a first AI reading */
+  async boardView() {
+    const t0 = performance.now();
+    while (performance.now() - t0 < 8000 && !(this.found === 4 && this.aiFrameAt >= 0)) await S.util.realSleep(200);
+    const L = this.light;
+    const light = L == null ? 'unknown' : L >= 70 && L <= 210 ? 'ok' : L >= 45 && L <= 230 ? 'borderline' : 'bad';
+    return { markers: this.found, tilt: this.found === 4 ? 'ok' : 'unknown', light,
+      detail: this.found === 4 ? (light === 'ok' ? null : `Board brightness ${Math.round(L)} of 255: ${L < 70 ? 'too dark' : 'too bright'}`) : `${this.found} of 4 markers found` };
+  }
+  read() {
+    const now = S.run.now();
+    const fresh = this.aiFrameAt >= this.lastChange + this.settleMs;
+    return {
+      ready: this.seenBoard && this.aiFrameAt >= 0,
+      hand: this.hand,
+      stableMs: this.hand || !fresh ? 0 : now - Math.max(this.lastChange, this.handClearAt),
+      handClearAt: this.handClearAt,
+      zones: JSON.parse(JSON.stringify(this.zones))
+    };
+  }
   truthVerdict() { return null; }
   onPrompt() {} onReturn() {} onBuild() {} manual() {}
   frame(canvas) {
@@ -184,6 +307,7 @@ class VisionLive {
 
 S.vision = null;
 S.makeVision = function () {
+  if (S.vision && S.vision.kind === 'live') S.vision.stop();
   S.vision = S.settings.get().visionMode === 'live' ? new VisionLive() : new VisionSim();
   return S.vision;
 };

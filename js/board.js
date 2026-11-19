@@ -16,7 +16,8 @@ S.boardCheck = (() => {
     const flat = h('div', { class: 'bc-flat' });
     const crops = h('div', { class: 'bc-crops' });
     const work = document.createElement('canvas');
-    let video = null, running = false, history = [];
+    let video = null, running = false, history = [], aiBusy = false, lastAiMs = null;
+    const aiTime = h('p', { class: 'muted small' });
 
     const show = (found, ms) => {
       const ids = new Set(found.map(f => f.id));
@@ -58,15 +59,25 @@ S.boardCheck = (() => {
       bctx.lineWidth = 3; bctx.font = 'bold 16px system-ui, sans-serif';
       /* Cut the crops first, so the zone outlines drawn next don't show up in them */
       const ai = S.zoneAI.model;
+      const zoneCanvases = [];
+      const guessEls = [];
       const cropEls = Object.entries(S.BOARD.zones).map(([k, z]) => {
         const c = S.aruco.zoneCrop(board, z, 224, layout);
-        let guess = null;
-        if (ai) {
-          const g = S.zoneAI.predict(c);
-          guess = h('span', { class: `aiguess ${g.conf < 0.6 ? 'unsure' : ''}` }, `AI: ${AI_NAME[g.name] || g.name} ${Math.round(g.conf * 100)}%`);
-        }
+        zoneCanvases.push(c);
+        const guess = h('span', { class: 'aiguess unsure' }, ai ? 'AI: ...' : '');
+        guessEls.push(guess);
         return h('figure', null, c, h('figcaption', null, S.ORGAN_NAME[k] || k, guess));
       });
+      /* The AI takes longer than one camera frame: run it only when it is free, on the newest crops */
+      if (ai && !aiBusy) {
+        aiBusy = true;
+        const t1 = performance.now();
+        S.zoneAI.predictMany(zoneCanvases).then(gs => {
+          gs.forEach((g, i) => { guessEls[i].className = `aiguess ${g.conf < 0.6 ? 'unsure' : ''}`; guessEls[i].textContent = `AI: ${AI_NAME[g.name] || g.name} ${Math.round(g.conf * 100)}%`; });
+          lastAiMs = performance.now() - t1;
+          aiTime.textContent = `The AI took ${Math.round(lastAiMs)} ms for all 5 zones.`;
+        }).catch(e => { aiTime.textContent = 'AI error: ' + (e && e.message); }).finally(() => { aiBusy = false; });
+      } else if (ai) { guessEls.forEach(g => { g.textContent = 'AI: busy, next frame'; }); }
       for (const [k, z] of Object.entries(S.BOARD.zones)) {
         const [x, y] = board.toBoard(z.x, z.y);
         bctx.strokeStyle = ZONE_COLOURS[k] || '#000';
@@ -123,7 +134,7 @@ S.boardCheck = (() => {
     } }, 'Save straightened board');
 
     const aiNote = h('p', { class: 'muted small' }, 'Loading the AI...');
-    S.zoneAI.load().then(m => { aiNote.textContent = `AI model from ${m.version}, trained on session${(m.info.trained_on || []).length > 1 ? 's' : ''} ${(m.info.trained_on || []).join(', ')} (${m.info.pictures} pictures). Early model: expect mistakes until more sessions are in.`; }).catch(() => { aiNote.textContent = 'No AI model yet.'; });
+    S.zoneAI.load().then(m => { aiNote.textContent = `${m.backbone === 'mobilenetv2' ? 'MobileNet AI' : 'Small fallback AI' + (m.fallbackReason ? ` (MobileNet could not start: ${m.fallbackReason})` : '')}, model from ${m.version}, trained on session${(m.info.trained_on || []).length > 1 ? 's' : ''} ${(m.info.trained_on || []).join(', ')} (${m.info.pictures} pictures). Early model: expect mistakes until more sessions are in.`; }).catch(() => { aiNote.textContent = 'No AI model yet.'; });
     return h('div', { class: 'boardcheck' },
       h('p', null, 'Hold the tablet where it will sit in the station. Every marker found turns green. The straightened board shows the 5 zones; each square underneath is what the AI will look at.'),
       h('div', { class: 'row wrap' }, startBtn, stopBtn, fileBtn, saveBtn, file),
@@ -133,6 +144,7 @@ S.boardCheck = (() => {
         h('section', null, h('h2', null, 'Straightened board'), flat)),
       h('h2', null, 'What the AI sees in each zone'),
       aiNote,
+      aiTime,
       crops);
   }
 
