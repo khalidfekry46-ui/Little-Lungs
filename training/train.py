@@ -23,6 +23,32 @@ from common import ZONES, CATS, FEAT_LEN, features, read_session_zip, straighten
 import synth  # noqa: E402
 
 
+def derive(zone, cat, tags, piece=None):
+    """One training name per zone, by priority: Hand > Partial > Flipped > Upside down > the piece > Empty.
+    Works for every export: session 1 (name by priority), session 2 (piece name plus 'also' ticks) and later
+    sessions (separate 'piece' column). The diaphragm with its other side up is correct, so it is never Flipped."""
+    tags = set(tags)
+    if piece:
+        cat = {"two": "partial", "none": "empty"}.get(piece, PIECE_CAT_ANY.get(piece, cat))
+    if cat == "hand":
+        return "hand"
+    if cat == "partial" or "partial" in tags or "slid" in tags:
+        return "partial"
+    if cat == "empty":
+        return "empty"
+    is_dia = cat == "diaphragm" or piece == "diaphragm" or (zone == "diaphragm" and cat in ("flipped", "upside_down") and "wrong_place" not in tags)
+    if is_dia:
+        return "upside_down" if ("upside_down" in tags or cat == "upside_down") else "diaphragm"
+    if cat == "flipped" or "flipped" in tags:
+        return "flipped"
+    if cat == "upside_down" or "upside_down" in tags:
+        return "upside_down"
+    return cat
+
+
+PIECE_CAT_ANY = {"rlung": "right_lung", "llung": "left_lung", "heart": "heart", "windpipe": "trachea", "diaphragm": "diaphragm"}
+
+
 def load(zdir):
     photos = []  # dicts: id, session, split, labels, tags, crops, frame
     for path in sorted(glob.glob(os.path.join(zdir, "*.zip"))):
@@ -30,8 +56,9 @@ def load(zdir):
         by = {}
         for x in rows:
             d = by.setdefault(x["photo"], {"id": x["photo"], "session": int(x["session"]), "split": x["use_for"], "labels": {}, "tags": {}})
-            d["labels"][x["zone"]] = x["category"]
-            d["tags"][x["zone"]] = (x.get("also") or "").split()
+            tags = (x.get("also") or "").split()
+            d["labels"][x["zone"]] = derive(x["zone"], x["category"], tags, x.get("piece") or None)
+            d["tags"][x["zone"]] = tags
         for pid, d in by.items():
             d["crops"] = {z: crops[(pid, z)] for z in ZONES if (pid, z) in crops}
             d["frame"] = frames.get(pid)

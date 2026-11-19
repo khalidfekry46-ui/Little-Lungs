@@ -626,6 +626,7 @@ select.inline { width: auto; min-height: 44px; }
 .tags { display: grid; gap: 0.15rem; text-align: left; font-size: 0.82rem; }
 .tagbox { display: flex; gap: 0.35rem; align-items: center; }
 .tagbox input { width: 18px; height: 18px; }
+.savedas { display: block; margin-top: 0.35rem; font-weight: 600; font-size: 0.9rem; }
 .aiguess { display: block; font-weight: 700; color: #137A3D; }
 .aiguess.unsure { color: var(--warn); }
 .bc-crops canvas { width: 150px; height: 150px; }

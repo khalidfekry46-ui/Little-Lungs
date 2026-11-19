@@ -206,9 +206,10 @@ S.collect = (() => {
     /* 5. Hands */
     if (r() < 0.3) { const pr = HAND_PAIRS[Math.floor(r() * HAND_PAIRS.length)]; (r() < 0.5 ? pr : [pr[0]]).forEach(z => handZones.push(z)); check = true; }
     /* Names per zone */
-    const labels = {}, tags = {};
+    const labels = {}, tags = {}, pieces = {};
     for (const z of ZONES) {
       const here = PIECES.filter(p => at[p] === z);
+      pieces[z] = handZones.includes(z) ? 'hand' : here.length > 1 ? 'two' : here.length === 1 ? here[0] : 'none';
       const t = new Set();
       here.forEach(p => { mods[p].forEach(m => m !== 'other_side' && t.add(m)); if (p !== z) t.add('wrong_place'); });
       if (partialZones.has(z)) t.add('partial');
@@ -237,7 +238,28 @@ S.collect = (() => {
       return `${PIECE_NAME[p]}: in its own place${how(p) || ', correct'}.`;
     }).concat(handZones.length ? [`Hand: hold a hand or sleeve over the ${handZones.map(ZN).join(' and ')} box${handZones.length > 1 ? 'es' : ''}.`] : []).join('\n');
     const bad = ZONES.filter(z => labels[z] !== PIECE_CAT[z]).length;
-    return { kind: bad ? 'mixed' : 'correct', text, labels, tags, check: check ? ZONES.slice() : [] };
+    return { kind: bad ? 'mixed' : 'correct', text, labels, tags, pieces, check: check ? ZONES.slice() : [] };
+  }
+
+  /* What is physically in a zone, and the one training name that follows from it.
+     Training name by priority: Hand > Partial > Flipped > Upside down > the piece > Empty.
+     The diaphragm with its other side up is correct, so it is never Flipped. (Same rule as training/train.py.) */
+  const PIECE_OF_CAT = { right_lung: 'rlung', left_lung: 'llung', heart: 'heart', trachea: 'windpipe', diaphragm: 'diaphragm' };
+  function guessPiece(z, label) {
+    if (label === 'hand') return 'hand';
+    if (label === 'empty') return 'none';
+    if (PIECE_OF_CAT[label]) return PIECE_OF_CAT[label];
+    return z; /* flipped, upside down or partial: most often the zone's own piece */
+  }
+  function derive(piece, tags) {
+    const t = new Set(tags);
+    if (piece === 'hand') return 'hand';
+    if (piece === 'two' || t.has('partial') || t.has('slid')) return 'partial';
+    if (piece === 'none') return 'empty';
+    if (piece === 'diaphragm') return t.has('upside_down') ? 'upside_down' : 'diaphragm';
+    if (t.has('flipped')) return 'flipped';
+    if (t.has('upside_down')) return 'upside_down';
+    return PIECE_CAT[piece];
   }
 
   /* The 25-shot plan for a session.
@@ -495,7 +517,16 @@ S.collect = (() => {
       const layout = Object.assign({}, S.BOARD, { pxPerCm: 12 });
       const board = S.aruco.straighten(full, found, layout);
       if (!board) { S.ui.toast('A marker was lost at the moment of capture. Hold still and try again.'); return; }
-      current = { s, full, found, board, layout, labels: Object.assign({}, s.labels), tags: Object.assign({}, s.tags || {}), crops: {} };
+      const pieces = {}, tags = {};
+      for (const z of ZONES) {
+        pieces[z] = (s.pieces && s.pieces[z]) || guessPiece(z, s.labels[z]);
+        const tg = new Set(((s.tags || {})[z]) || []);
+        if (tg.has('slid')) { tg.delete('slid'); tg.add('partial'); }
+        tg.delete('wrong_place');
+        if (['flipped', 'upside_down', 'partial'].includes(s.labels[z])) tg.add(s.labels[z]);
+        tags[z] = tg;
+      }
+      current = { s, full, found, board, layout, pieces, tags, labels: {}, crops: {} };
       for (const z of ZONES) current.crops[z] = S.aruco.zoneCrop(board, S.BOARD.zones[z], 224, layout);
       captureBtn.disabled = true;
       showReview();
@@ -503,17 +534,25 @@ S.collect = (() => {
 
     function showReview() {
       const c = current;
+      const PIECE_OPTS = [['none', 'Empty'], ['rlung', 'Right lung'], ['llung', 'Left lung'], ['heart', 'Heart'], ['windpipe', 'Windpipe'], ['diaphragm', 'Diaphragm'], ['two', 'Two pieces'], ['hand', 'Hand covering it']];
       const figs = ZONES.map(z => {
-        const sel = h('select', { 'data-zone': z, onchange: () => { c.labels[z] = sel.value; fig.classList.remove('check'); } }, CATS.map(cat => h('option', { value: cat, selected: c.labels[z] === cat ? true : null }, CAT_NAME[cat])));
-        c.tags[z] = new Set(c.tags[z] || []);
-        const tag = (k, label) => h('label', { class: 'tagbox' }, h('input', { type: 'checkbox', checked: c.tags[z].has(k) ? true : null, onchange: e => { if (e.target.checked) c.tags[z].add(k); else c.tags[z].delete(k); } }), label);
-        const fig = h('figure', { class: c.s.check.includes(z) ? 'check' : '' }, c.crops[z], h('figcaption', null, h('strong', null, `${ZN(z)} zone`), sel,
-          h('div', { class: 'tags' }, tag('flipped', 'also flipped'), tag('upside_down', 'also upside down'), tag('wrong_place', 'wrong piece'))));
+        const out = h('span', { class: 'savedas' });
+        let fig = null;
+        const update = () => {
+          c.labels[z] = derive(c.pieces[z], c.tags[z]);
+          const p = c.pieces[z];
+          out.textContent = `Saved as: ${CAT_NAME[c.labels[z]]}${PIECE_CAT[p] && p !== z ? ' (in the wrong box)' : ''}`;
+        };
+        const sel = h('select', { 'data-zone': z, onchange: () => { c.pieces[z] = sel.value; update(); fig.classList.remove('check'); } }, PIECE_OPTS.map(([v, l]) => h('option', { value: v, selected: c.pieces[z] === v ? true : null }, l)));
+        const tag = (k, label) => h('label', { class: 'tagbox' }, h('input', { type: 'checkbox', checked: c.tags[z].has(k) ? true : null, onchange: e => { if (e.target.checked) c.tags[z].add(k); else c.tags[z].delete(k); update(); fig.classList.remove('check'); } }), label);
+        fig = h('figure', { class: c.s.check.includes(z) ? 'check' : '' }, c.crops[z], h('figcaption', null, h('strong', null, `${ZN(z)} zone: what is in it?`), sel,
+          h('div', { class: 'tags' }, tag('flipped', 'back side up'), tag('upside_down', 'upside down'), tag('partial', 'partly outside / pushed in')), out));
+        update();
         return fig;
       });
       review.replaceChildren(
-        h('h3', null, 'Check the names, then save'),
-        h('p', { class: 'muted' }, c.s.check.length ? 'Zones with an orange frame need your eye. Pick the main name by priority: Hand, then Partial, then Flipped, then Upside down, then the piece. Tick "also" for anything else true (for example Partial and also flipped). Hand: any part of a hand, finger or sleeve is over the zone. Partial: a piece is about a quarter or more outside its box, or two pieces share the box. Flipped: a lung or the heart with its back side up. Upside down: a piece turned so its top points down. The diaphragm with its other side up but the right way round is just Diaphragm. Otherwise name the piece that fills the zone, or Empty.' : 'Each zone is named from the arrangement. Change a name if the picture shows something else.'),
+        h('h3', null, 'Check each zone, then save'),
+        h('p', { class: 'muted' }, 'For each zone, choose what is really in it: the piece, Empty, Two pieces, or Hand covering it. Then tick everything else that is true: back side up, upside down, partly outside its box (or a piece pushed in from another box). Several ticks can be true at once. The app works out the training name by itself. The diaphragm with its other side up but the right way round is correct: leave "back side up" unticked for it. Orange frames need your eye.'),
         h('div', { class: 'cs-crops' }, figs),
         h('div', { class: 'row wrap' },
           h('button', { class: 'btn primary big', type: 'button', onclick: save }, 'Save and next'),
@@ -536,7 +575,7 @@ S.collect = (() => {
       const rec = {
         id: c.s.extra ? `${shotId(a.session, 99)}-${S.util.rand4()}` : shotId(a.session, n),
         session: a.session, n, split: a.split, kind: c.s.kind, extra: !!c.s.extra, instruction: c.s.text,
-        labels: c.labels, tags: Object.fromEntries(ZONES.map(z => [z, [...(c.tags[z] || [])]])), planned: c.s.labels, lighting: a.lighting, camera: a.camera, device: a.device, hands: a.hands, note: a.note,
+        labels: c.labels, pieces: c.pieces, tags: Object.fromEntries(ZONES.map(z => [z, [...(c.tags[z] || [])]])), planned: c.s.labels, lighting: a.lighting, camera: a.camera, device: a.device, hands: a.hands, note: a.note,
         markers: Object.fromEntries(c.found.map(f => [f.id, f.centre.map(v => Math.round(v * 10) / 10)])),
         frame_w: c.full.width, frame_h: c.full.height, created_at: new Date().toISOString(),
         frame: await toBlob(c.full, 0.85), crops: {}
@@ -570,8 +609,8 @@ S.collect = (() => {
   /* ---------- Export ---------- */
   const bytes = async b => new Uint8Array(await b.arrayBuffer());
   const csvRow = vals => vals.map(v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; }).join(',');
-  const HEAD = ['photo', 'session', 'use_for', 'kind', 'zone', 'category', 'also', 'changed_by_you', 'lighting', 'camera', 'device', 'hands', 'instruction'];
-  const rows = s => ZONES.map(z => csvRow([s.id, s.session, s.split, s.kind, z, s.labels[z], ((s.tags || {})[z] || []).join(' '), s.labels[z] !== s.planned[z] ? 'yes' : '', s.lighting, s.camera, s.device, s.hands, s.instruction]));
+  const HEAD = ['photo', 'session', 'use_for', 'kind', 'zone', 'piece', 'category', 'also', 'changed_by_you', 'lighting', 'camera', 'device', 'hands', 'instruction'];
+  const rows = s => ZONES.map(z => csvRow([s.id, s.session, s.split, s.kind, z, (s.pieces || {})[z] || '', s.labels[z], ((s.tags || {})[z] || []).join(' '), s.labels[z] !== s.planned[z] ? 'yes' : '', s.lighting, s.camera, s.device, s.hands, s.instruction]));
 
   async function exportSession(n) {
     const list = (await allShots()).filter(s => s.session === n);
