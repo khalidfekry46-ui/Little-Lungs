@@ -50,7 +50,7 @@ S.collect = (() => {
   const ZONES = ['rlung', 'windpipe', 'heart', 'llung', 'diaphragm'];
   const ZN = k => S.ORGAN_NAME[k] || k;
   const ZONE_COLOURS = { rlung: '#E5243B', llung: '#C2185B', windpipe: '#E08A00', heart: '#7B1FA2', diaphragm: '#1565C0' };
-  const SPLIT = n => (n === 5 ? 'test' : 'train');
+  const SPLIT = n => (n === 5 ? 'test' : n === 4 ? 'validation' : 'train');
   const ACTIVE_KEY = 'll-collect-active';
 
   /* Seeded random numbers, so a session's plan is the same every time it is opened */
@@ -64,8 +64,8 @@ S.collect = (() => {
     1: { type: 'standard', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Done on Khalid\u2019s phone. On another device, start at session 2.' },
     2: { type: 'mixed', count: 40, lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Ceiling lights. Camera where the holder will be, a little closer than session 1 so the board fills most of the picture.' },
     3: { type: 'mixed', count: 40, lighting: 'Desk lamp from the left', camera: 'Tilted a little', tip: 'Main light off, a lamp or phone torch from one side (shadows are good). Camera a little lower or tilted. Use different hands and sleeves.' },
-    4: { type: 'mixed', count: 40, lighting: 'Daylight from a window', camera: 'A little higher', tip: 'Daylight or a different room, another day if you can. Camera a little higher or further away.' },
-    5: { type: 'mixed', count: 30, lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. Another day, the real setup (holder, the device students will use). These photos are never used for training, only to measure accuracy.' }
+    4: { type: 'mixed', count: 40, lighting: 'Daylight from a window', camera: 'A little higher', tip: 'CHECKING (validation). Another day, daylight or a different room. Camera a little higher or further away. Used to tune the AI, not to train it.' },
+    5: { type: 'mixed', count: 40, lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. Another day, the real setup (holder, the device students will use). These photos are never used for training, only to measure accuracy.' }
   };
   const schedule = n => SCHEDULE[n] || { type: 'mixed', count: 40, lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick a light and camera position used least so far.' };
 
@@ -250,8 +250,22 @@ S.collect = (() => {
     const done = () => shots.map((s, i) => Object.assign(s, { n: i + 1 }));
     if (type === 'mixed') {
       const n = schedule(session).count || 40;
-      /* About 1 in 8 photos all correct, so correct pieces stay common */
-      for (let i = 0; i < n; i++) shots.push(i % 8 === 0 ? { kind: 'correct', text: 'All 5 pieces in their own places, correct way up. Shift or turn them very slightly.', labels: allCorrect(), tags: {}, check: [] } : mixedShot(r));
+      /* Reference photos first: an empty board (every session), and in session 2 each piece alone on each side.
+         Claude uses these to cut out the pieces and build many more training pictures. */
+      const emptyBoard = { kind: 'empty', text: 'EMPTY BOARD: take every piece off. Leave the magnets where they are. (Reference photo.)', labels: Object.fromEntries(ZONES.map(z => [z, 'empty'])), tags: {}, check: [] };
+      const alone = (p, side) => {
+        const labels = Object.fromEntries(ZONES.map(z => [z, 'empty']));
+        labels[p] = side === 'back' && p !== 'diaphragm' ? 'flipped' : PIECE_CAT[p];
+        const how = side === 'back' ? (p === 'diaphragm' ? 'with its OTHER side up, still the right way round' : 'BACK side up (flipped)') : 'front side up, the right way round';
+        return { kind: side === 'back' && p !== 'diaphragm' ? 'flipped' : 'correct', text: `ONLY the ${PIECE_NAME[p].toLowerCase()} on the board, in its own place, ${how}. Every other piece off. (Reference photo.)`, labels, tags: {}, check: [] };
+      };
+      if (session === 2) {
+        shots.push(emptyBoard);
+        PIECES.forEach(p => shots.push(alone(p, 'front')));
+        ['rlung', 'llung', 'heart', 'diaphragm'].forEach(p => shots.push(alone(p, 'back')));
+      } else shots.push(emptyBoard);
+      /* About 1 in 8 of the rest all correct, so correct pieces stay common */
+      for (let i = 0; shots.length < n; i++) shots.push(i % 8 === 0 ? { kind: 'correct', text: 'All 5 pieces in their own places, correct way up. Shift or turn them very slightly.', labels: allCorrect(), tags: {}, check: [] } : mixedShot(r));
       return done();
     }
     if (type === 'focus') {
@@ -334,7 +348,7 @@ S.collect = (() => {
     const note = h('input', { type: 'text', id: 'cs-note', placeholder: 'Anything unusual' });
 
     container.replaceChildren(
-      h('p', null, 'Five sessions in total. Session 1 is done. Sessions 2, 3 and 4 are training (40 photos each); session 5 is the final test (30 photos) on another day with the real setup. Each photo changes several pieces at once, so read every line of the instruction.'),
+      h('p', null, 'Five sessions in total. Session 1 is done. Sessions 2 and 3 are training, session 4 is for checking (validation), and session 5 is the final test on another day with the real setup; 40 photos each. Each photo can change several pieces at once, so read every line of the instruction.'),
       h('section', null, h('h2', null, 'Start a session'),
         h('form', { class: 'sform', onsubmit: e => {
           e.preventDefault();
