@@ -223,7 +223,7 @@ S.camera = (() => {
     if (!d.ok) return d;
     stop();
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     } catch (e) {
       const n = e && e.name;
       const blockedByFrame = d.framed && ['NotAllowedError', 'NotSupportedError', 'SecurityError'].includes(n);
