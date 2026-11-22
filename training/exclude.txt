@@ -1,2 +1,4 @@
 # Photos never used for training or testing, with the reason.
 S02-03  # windpipe was upside down but saved as correct (reference photo)
+S03-07 diaphragm  # unclear (team review)
+S03-08 windpipe  # unclear (team review)

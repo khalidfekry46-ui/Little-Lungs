@@ -112,8 +112,10 @@ def flip_name(label, piece_zone):
 def make(board, labels, tags, r, per_zone=12):
     """board: straightened BGR (PX px per cm). labels: zone -> name. tags: zone -> list of extra truths.
     Yields (rgb224, name, how) for one real photo."""
-    present = [z for z in ZONES if labels[z] not in ("empty",)]
+    present = [z for z in ZONES if labels.get(z, "empty") not in ("empty",)]
     for z in ZONES:
+        if z not in labels:  # zone left out on purpose
+            continue
         lab = labels[z]
         t = set(tags.get(z, []))
         zc, zwh = zone_centre(z), BOARD["zones"][z][2:]

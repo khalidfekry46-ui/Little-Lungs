@@ -50,16 +50,27 @@ PIECE_CAT_ANY = {"rlung": "right_lung", "llung": "left_lung", "heart": "heart", 
 
 
 def excluded():
-    """Photo IDs listed in exclude.txt (one per line, # for notes) are never used."""
+    """Lines in exclude.txt (# for notes): a photo ID leaves out the whole photo, "photo zone" leaves out one zone."""
     path = os.path.join(os.path.dirname(__file__), "exclude.txt")
     if not os.path.exists(path):
         return set()
-    return {ln.split("#")[0].strip() for ln in open(path) if ln.split("#")[0].strip()}
+    return {" ".join(ln.split("#")[0].split()) for ln in open(path) if ln.split("#")[0].strip()}
+
+
+def corrections():
+    """Label fixes from the team's review: (photo, zone) -> (piece, tags). See corrections.csv."""
+    import csv
+    path = os.path.join(os.path.dirname(__file__), "corrections.csv")
+    if not os.path.exists(path):
+        return {}
+    lines = [ln for ln in open(path) if not ln.startswith("#")]
+    return {(r["photo"], r["zone"]): (r["piece"], r["tags"].split()) for r in csv.DictReader(lines)}
 
 
 def load(zdir):
     photos = []  # dicts: id, session, split, labels, tags, crops, frame
     skip = excluded()
+    fix = corrections()
     for path in sorted(glob.glob(os.path.join(zdir, "*.zip"))):
         rows, frames, crops = read_session_zip(path)
         by = {}
@@ -67,11 +78,19 @@ def load(zdir):
             if x["photo"] in skip:
                 continue
             d = by.setdefault(x["photo"], {"id": x["photo"], "session": int(x["session"]), "split": x["use_for"], "labels": {}, "tags": {}})
+            if f'{x["photo"]} {x["zone"]}' in skip:
+                d.setdefault("skip", set()).add(x["zone"])
+                continue
             tags = (x.get("also") or "").split()
-            d["labels"][x["zone"]] = derive(x["zone"], x["category"], tags, x.get("piece") or None)
+            piece = x.get("piece") or None
+            if (x["photo"], x["zone"]) in fix:
+                piece, tags = fix[(x["photo"], x["zone"])]
+                tags = tags + (["wrong_place"] if piece in PIECE_CAT_ANY and piece != x["zone"] else [])
+            cat = "hand" if piece == "hand" else x["category"]
+            d["labels"][x["zone"]] = derive(x["zone"], cat, tags, piece)
             d["tags"][x["zone"]] = tags
         for pid, d in by.items():
-            d["crops"] = {z: crops[(pid, z)] for z in ZONES if (pid, z) in crops}
+            d["crops"] = {z: crops[(pid, z)] for z in ZONES if (pid, z) in crops and z in d["labels"]}
             d["frame"] = frames.get(pid)
             photos.append(d)
     return photos
@@ -188,6 +207,8 @@ def main():
     photos = load(a.zips)
     if excluded():
         print(f"Left out on purpose: {', '.join(sorted(excluded()))}")
+    if corrections():
+        print(f"Label fixes applied: {len(corrections())}")
     print(f"{len(photos)} photos from sessions {sorted(set(p['session'] for p in photos))}")
     train = [p for p in photos if p["split"] == "train"]
     val = [p for p in photos if p["split"] == "validation"]
