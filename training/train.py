@@ -85,6 +85,10 @@ def build(photos, synth_per_zone, seed):
     r = np.random.default_rng(seed)
     for p in photos:
         for z in ZONES:
+            # Hands videos (session 90+) give hundreds of near-identical hand pictures in one look;
+            # keep 1 in 10 so the AI doesn't learn "this video's lighting = hand"
+            if p["session"] >= 90 and p["labels"].get(z) == "hand" and r.random() > 0.1:
+                continue
             if z in p["crops"]:
                 imgs.append(p["crops"][z]); y.append(p["labels"][z]); src.append("real")
         if synth_per_zone and p["frame"] is not None:
@@ -174,7 +178,7 @@ def main():
     ap.add_argument("--synth", type=int, default=12)
     ap.add_argument("--out", default=None)
     ap.add_argument("--backbone", choices=["hand", "mnet"], default="mnet", help="mnet: MobileNetV2 features (better); hand: the small fallback model")
-    ap.add_argument("--xsess", action="store_true", help="train on each session alone and test on the others (fair check)")
+    ap.add_argument("--xsess", action="store_true", help="hold out each session in turn, train on the rest (fair check)")
     ap.add_argument("--cv", action="store_true", help="only one session so far: hold out whole photos in turn")
     a = ap.parse_args()
     global BACKBONE
@@ -190,13 +194,13 @@ def main():
     test = [p for p in photos if p["split"] == "test"]
 
     if a.xsess:
-        sess = sorted(set(p["session"] for p in train))
+        sess = sorted(set(p["session"] for p in train if p["session"] < 90))
         for s in sess:
-            tr = [p for p in train if p["session"] == s]
-            te = [p for p in train if p["session"] != s]
+            tr = [p for p in train if p["session"] != s]
+            te = [p for p in train if p["session"] == s]
             Xtr, ytr, _ = build(tr, a.synth, s)
             Xte, yte, _ = build(te, 0, 0)
-            report(yte, predict(fit(Xtr, ytr), Xte)[0], f"Trained on session {s} only, tested on sessions {[q for q in sess if q != s]}")
+            report(yte, predict(fit(Xtr, ytr), Xte)[0], f"Session {s} held out (trained on all the others)")
 
     if a.cv:
         r = np.random.default_rng(0)
