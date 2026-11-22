@@ -50,7 +50,7 @@ S.collect = (() => {
   const ZONES = ['rlung', 'windpipe', 'heart', 'llung', 'diaphragm'];
   const ZN = k => S.ORGAN_NAME[k] || k;
   const ZONE_COLOURS = { rlung: '#E5243B', llung: '#C2185B', windpipe: '#E08A00', heart: '#7B1FA2', diaphragm: '#1565C0' };
-  const SPLIT = n => (n === 5 ? 'test' : n === 4 ? 'validation' : 'train');
+  const SPLIT = n => (n === 5 ? 'test' : 'train');
   const ACTIVE_KEY = 'll-collect-active';
 
   /* Seeded random numbers, so a session's plan is the same every time it is opened */
@@ -64,7 +64,7 @@ S.collect = (() => {
     1: { type: 'standard', lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Done on Khalid\u2019s phone. On another device, start at session 2.' },
     2: { type: 'mixed', count: 40, lighting: 'Ceiling lights', camera: 'Normal height', tip: 'Ceiling lights. Camera where the holder will be, a little closer than session 1 so the board fills most of the picture.' },
     3: { type: 'mixed', count: 40, lighting: 'Desk lamp from the left', camera: 'Tilted a little', tip: 'Main light off, a lamp or phone torch from one side (shadows are good). Camera a little lower or tilted. Use different hands and sleeves.' },
-    4: { type: 'mixed', count: 40, lighting: 'Daylight from a window', camera: 'A little higher', tip: 'CHECKING (validation). Another day, daylight or a different room. Camera a little higher or further away. Used to tune the AI, not to train it.' },
+    4: { type: 'sides', count: 40, lighting: 'Final room lighting', camera: 'On the holder', tip: 'TRAINING, focused on what the AI gets wrong most: pieces back side up or upside down (heart, lungs, windpipe). Use the final setup: the holder, the real room and its lighting. If you added marks to the backs, add them before this session.' },
     5: { type: 'mixed', count: 40, lighting: 'Mixed / changing', camera: 'On the holder', tip: 'FINAL TEST. Another day, the real setup (holder, the device students will use). These photos are never used for training, only to measure accuracy.' }
   };
   const schedule = n => SCHEDULE[n] || { type: 'mixed', count: 40, lighting: 'Mixed / changing', camera: 'Moved to one side', tip: 'EXTRA TRAINING. Pick a light and camera position used least so far.' };
@@ -175,19 +175,20 @@ S.collect = (() => {
     llung: [{ where: 'on the RIGHT round magnet pair (below its diamond)', hits: ['llung', 'diaphragm'] }, { where: 'on the LOWER-RIGHT round magnet pair', hits: ['llung', 'diaphragm'] }],
     diaphragm: [{ where: 'on the LOWER-RIGHT round magnet pair', hits: ['diaphragm', 'llung'] }]
   };
-  function mixedShot(r) {
+  function mixedShot(r, opt = {}) {
+    const fP = opt.flip ?? 0.28, offP = opt.off ?? 0.45, swapP = opt.swap ?? 0.35, uW = opt.up ?? 0.25, uO = opt.upOther ?? 0.18, hP = opt.hand ?? 0.3;
     const at = Object.fromEntries(PIECES.map(p => [p, p])); /* piece -> zone it sits in, or 'off', or 'decoy' */
     const mods = Object.fromEntries(PIECES.map(p => [p, []]));
     const lines = {};
     const partialZones = new Set(), handZones = [];
     let check = false;
     /* 1. Swap two pieces */
-    if (r() < 0.35) {
+    if (r() < swapP) {
       if (r() < 0.65) { at.rlung = 'llung'; at.llung = 'rlung'; } else { at.heart = 'windpipe'; at.windpipe = 'heart'; check = true; }
     }
     /* 2. Take one piece off */
     const offable = PIECES.filter(p => at[p] === p);
-    if (r() < 0.45 && offable.length) { const k = r() < 0.3 ? 2 : 1; pickN(r, offable, k).forEach(p => { at[p] = 'off'; }); }
+    if (r() < offP && offable.length) { const k = r() < 0.3 ? 2 : 1; pickN(r, offable, k).forEach(p => { at[p] = 'off'; }); }
     /* 3. One piece onto a decoy magnet */
     const decoyable = PIECES.filter(p => at[p] === p);
     if (r() < 0.22 && decoyable.length) {
@@ -198,13 +199,13 @@ S.collect = (() => {
     /* 4. Flip, upside down, slide out (several can happen to one piece) */
     for (const p of PIECES) {
       if (at[p] === 'off') continue;
-      if ((p === 'rlung' || p === 'llung' || p === 'heart') && r() < 0.28) mods[p].push('flipped');
-      if (r() < (p === 'windpipe' || p === 'diaphragm' ? 0.25 : 0.18)) mods[p].push('upside_down');
+      if ((p === 'rlung' || p === 'llung' || p === 'heart') && r() < fP) mods[p].push('flipped');
+      if (r() < (p === 'windpipe' || p === 'diaphragm' ? uW : uO)) mods[p].push('upside_down');
       if (p === 'diaphragm' && r() < 0.4) mods[p].push('other_side');
       if (at[p] !== 'decoy' && r() < 0.08) { mods[p].push('slid'); partialZones.add(at[p]); check = true; }
     }
     /* 5. Hands */
-    if (r() < 0.3) { const pr = HAND_PAIRS[Math.floor(r() * HAND_PAIRS.length)]; (r() < 0.5 ? pr : [pr[0]]).forEach(z => handZones.push(z)); check = true; }
+    if (r() < hP) { const pr = HAND_PAIRS[Math.floor(r() * HAND_PAIRS.length)]; (r() < 0.5 ? pr : [pr[0]]).forEach(z => handZones.push(z)); check = true; }
     /* Names per zone */
     const labels = {}, tags = {}, pieces = {};
     for (const z of ZONES) {
@@ -290,6 +291,23 @@ S.collect = (() => {
       for (let i = 0; shots.length < n; i++) shots.push(i % 8 === 0 ? { kind: 'correct', text: 'All 5 pieces in their own places, correct way up. Shift or turn them very slightly.', labels: allCorrect(), tags: {}, check: [] } : mixedShot(r));
       return done();
     }
+    if (type === 'sides') {
+      /* Session 4: the cases the AI confuses most. A piece back side up or upside down looks almost like the correct piece,
+         so most shots have one or more of these, next to correct pieces for contrast. */
+      const n = schedule(session).count || 40;
+      const alone = (p, how, label, text) => {
+        const labels = Object.fromEntries(ZONES.map(z => [z, 'empty'])); labels[p] = label;
+        return { kind: label === PIECE_CAT[p] ? 'correct' : label, text: `ONLY the ${PIECE_NAME[p].toLowerCase()} on the board, in its own place, ${text}. Every other piece off. (Reference photo.)`, labels, tags: label === PIECE_CAT[p] ? {} : { [p]: [label] }, pieces: Object.fromEntries(ZONES.map(z => [z, z === p ? p : 'none'])), check: [] };
+      };
+      shots.push({ kind: 'empty', text: 'EMPTY BOARD: take every piece off. Leave the magnets where they are. (Reference photo.)', labels: Object.fromEntries(ZONES.map(z => [z, 'empty'])), tags: {}, check: [] });
+      shots.push(alone('heart', 'back', 'flipped', 'BACK side up (flipped)'));
+      shots.push(alone('rlung', 'back', 'flipped', 'BACK side up (flipped)'));
+      shots.push(alone('llung', 'back', 'flipped', 'BACK side up (flipped)'));
+      shots.push(alone('windpipe', 'turned', 'upside_down', 'UPSIDE DOWN (top end at the bottom)'));
+      shots.push(alone('heart', 'turned', 'upside_down', 'UPSIDE DOWN, front side up'));
+      for (let i = 0; shots.length < n; i++) shots.push(i % 7 === 0 ? { kind: 'correct', text: 'All 5 pieces in their own places, correct way up. Shift or turn them very slightly.', labels: allCorrect(), tags: {}, check: [] } : mixedShot(r, { flip: 0.5, up: 0.55, upOther: 0.4, hand: 0.12, off: 0.2, swap: 0.2 }));
+      return done();
+    }
     if (type === 'focus') {
       for (let i = 0; i < 6; i++) shots.push(twoHands(r));
       pickN(r, HAND_PAIRS, 6).forEach((pr, i) => shots.push(handShot(pr, HOWS[i % HOWS.length])));
@@ -361,7 +379,7 @@ S.collect = (() => {
     const applySchedule = () => {
       const n = Number(num.value) || 1, sc = schedule(n);
       split.value = SPLIT(n); light.value = sc.lighting; height.value = sc.camera;
-      tipBox.textContent = `Session ${n}${sc.type === 'focus' ? ' (hands and overlaps only)' : sc.type === 'tricks' ? ' (flipped and upside-down pieces only)' : ''}: ${sc.tip}`;
+      tipBox.textContent = `Session ${n}${sc.type === 'focus' ? ' (hands and overlaps only)' : sc.type === 'tricks' ? ' (flipped and upside-down pieces only)' : sc.type === 'sides' ? ' (mostly back side up and upside down)' : ''}: ${sc.tip}`;
     };
     num.addEventListener('input', applySchedule);
     applySchedule();
