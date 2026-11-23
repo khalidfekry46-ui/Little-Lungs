@@ -5,11 +5,16 @@
    cls is an organ id, 'rot:<organ>' for a rotated or flipped piece, or 'empty'. */
 window.S = window.S || {};
 
-S.judge = function (target, zones, thr) {
+S.judge = function (target, zones, thr, opt = {}) {
   const isLung = o => o === 'rlung' || o === 'llung';
   const z = zones[target] || { cls: 'empty', conf: 1 };
-  /* A piece half outside its box, or a hand: not finished yet, keep waiting */
-  if (z.cls === 'partial' || z.cls === 'hand') return null;
+  /* opt.base: what each zone showed when the prompt started (a piece left on the board is not a new answer).
+     opt.long: the board has been still with no hand for several seconds, so the student has let go. */
+  const changed = o => !opt.base || !zones[o] || zones[o].cls !== opt.base[o];
+  /* A piece half outside its box, or a hand: maybe still adjusting, keep waiting.
+     If the student has let go and it is still half outside, it is answered: the position is wrong. */
+  if (z.cls === 'hand') return null;
+  if (z.cls === 'partial') return opt.long ? { verdict: 'wrong', error: 'position', seenZone: target, seenCls: z.cls, conf: z.conf } : null;
   /* Live camera: pOwn = how sure the AI is that the target piece is in its zone, the right way up.
      Sure it is (>= thr): judge as usual. Sure it is not (<= 1 - thr): judge as usual. In between: ask the operator. */
   if (z.pOwn != null && z.pOwn > 1 - thr && z.pOwn < thr) return { verdict: 'cant_verify', error: null, seenZone: target, seenCls: z.cls, conf: z.conf };
@@ -24,6 +29,12 @@ S.judge = function (target, zones, thr) {
   if (z.cls !== 'empty') {
     const other = z.cls.replace('rot:', '');
     return { verdict: 'wrong', error: isLung(other) && isLung(target) ? 'left_right_swap' : 'wrong_piece', seenZone: target, seenCls: z.cls, conf: z.conf };
+  }
+  /* The target zone is empty but something new is on the board somewhere else:
+     another piece, or a piece lying across zones. That is the student's answer, and it is wrong. */
+  const other = S.ORGANS.find(o => o !== target && zones[o] && zones[o].cls !== 'empty' && zones[o].cls !== 'hand' && changed(o));
+  if (other && (zones[other].cls !== 'partial' || opt.long)) {
+    return { verdict: 'wrong', error: zones[other].cls === 'partial' ? 'wrong_zone' : 'wrong_piece', seenZone: other, seenCls: zones[other].cls, conf: zones[other].conf };
   }
   return null; /* nothing relevant on the board yet */
 };
@@ -45,16 +56,8 @@ class VisionSim {
   async start() { return true; }
   async selfTest() { return { ok: true, detail: 'Simulated model' }; }
   async boardView() { return { markers: 4, tilt: 'ok', light: 'ok' }; }
-  /* Why there is no AI reading yet, in words for the operator */
-  notReadyReason() {
-    if (this.found !== 4) return `Only ${this.found || 0} of 4 corner markers are visible, so the AI cannot look at the zones.`;
-    if (!S.zoneAI.model) return 'The AI model has not finished loading.';
-    if (this.aiError) return 'The AI stopped with an error: ' + this.aiError;
-    if (this.aiBusy) return 'The AI is still looking at the board for the first time. Tap Run the check again in a few seconds.';
-    if (this.aiDiscarded) return `The board kept changing while the AI looked (${this.aiDiscarded} times, ${Math.round(this.aiMs || 0)} ms per look). Keep hands, shadows and the tablet still, then run the check again.`;
-    if (S.run.now() - this.lastChange < this.settleMs) return 'The camera keeps seeing movement on the board (people, shadows, flickering light or a wobbling stand). Keep it still, then run the check again.';
-    return 'The camera AI has not looked at the board yet.';
-  }
+  preview() { return null; }
+  notReadyReason() { return 'The simulated camera is not ready.'; }
   read() {
     const now = S.run.now();
     return {
@@ -179,6 +182,9 @@ class VisionLive {
     this.light = null;
     this.zones = Object.fromEntries(S.ORGANS.map(o => [o, { cls: 'empty', conf: 0 }]));
     this.aiFrameAt = -1;         /* when the frame the AI last looked at was taken */
+    this.foundList = [];
+    this.lastPos = {};           /* last place each corner marker was seen, to show a covered one */
+    this.hiddenSince = null;     /* since when a corner marker has been hidden */
     this.aiBusy = false;
     this.aiHand = false;
     this.settleMs = 700;         /* still this long before the AI looks */
@@ -224,6 +230,11 @@ class VisionLive {
     ctx.drawImage(v, 0, 0, this.work.width, this.work.height);
     const found = S.aruco.detect(ctx.getImageData(0, 0, this.work.width, this.work.height));
     this.found = found.length;
+    this.foundList = found;
+    this.workW = this.work.width; this.workH = this.work.height;
+    found.forEach(f => { this.lastPos[f.id] = f.corners; });
+    if (found.length < 4 && this.seenBoard) { if (this.hiddenSince == null) this.hiddenSince = now; }
+    else this.hiddenSince = null;
     if (found.length < 4) {
       /* A marker that was visible is now covered: almost always a hand or arm */
       this.markersHidden = this.seenBoard;
@@ -309,6 +320,55 @@ class VisionLive {
     const light = L == null ? 'unknown' : L >= 70 && L <= 210 ? 'ok' : L >= 45 && L <= 230 ? 'borderline' : 'bad';
     return { markers: this.found, tilt: this.found === 4 ? 'ok' : 'unknown', light,
       detail: this.found === 4 ? (light === 'ok' ? null : `Board brightness ${Math.round(L)} of 255: ${L < 70 ? 'too dark' : 'too bright'}`) : `${this.found} of 4 markers found` };
+  }
+  /* Live camera picture with the 4 corner markers outlined: green = seen, red = covered.
+     Shows nothing about the organ zones, so it gives the student no hints. */
+  preview({ caption = true } = {}) {
+    const h = S.util.h;
+    const box = h('figure', { class: 'cam-preview' });
+    const cv = h('canvas', { 'aria-label': 'Live camera view of the board' });
+    const cap = h('figcaption');
+    box.append(cv);
+    if (caption) box.append(cap);
+    const ids = Object.keys(S.BOARD.markers).map(Number);
+    const draw = () => {
+      if (!box.isConnected && box._started) return;
+      box._started = true;
+      const v = this.video;
+      if (v && v.videoWidth) {
+        const W = 640, k = W / v.videoWidth;
+        cv.width = W; cv.height = Math.round(v.videoHeight * k);
+        const c = cv.getContext('2d');
+        c.drawImage(v, 0, 0, cv.width, cv.height);
+        const sx = cv.width / (this.workW || cv.width), sy = cv.height / (this.workH || cv.height);
+        const seen = new Set((this.foundList || []).map(f => f.id));
+        c.lineWidth = 4;
+        ids.forEach(id => {
+          const q = this.lastPos[id];
+          if (!q) return;
+          const ok = seen.has(id);
+          c.strokeStyle = ok ? '#1f9d55' : '#d93025';
+          c.beginPath(); q.forEach(([x, y], i) => (i ? c.lineTo(x * sx, y * sy) : c.moveTo(x * sx, y * sy))); c.closePath(); c.stroke();
+          if (!ok) { c.fillStyle = 'rgba(217,48,37,0.35)'; c.fill(); }
+        });
+        const n = seen.size;
+        cap.textContent = n === 4 ? 'All 4 black corner squares can be seen.' : `${4 - n} of the 4 black corner squares ${4 - n === 1 ? 'is' : 'are'} covered or out of view.`;
+        box.classList.toggle('bad', n < 4);
+      } else cap.textContent = 'Starting the camera...';
+      setTimeout(draw, 150);
+    };
+    setTimeout(draw, 0);
+    return box;
+  }
+  /* Why there is no AI reading yet, in words for the operator */
+  notReadyReason() {
+    if (this.found !== 4) return `Only ${this.found || 0} of 4 corner markers are visible, so the AI cannot look at the zones.`;
+    if (!S.zoneAI.model) return 'The AI model has not finished loading.';
+    if (this.aiError) return 'The AI stopped with an error: ' + this.aiError;
+    if (this.aiBusy) return 'The AI is still looking at the board for the first time. Tap Run the check again in a few seconds.';
+    if (this.aiDiscarded) return `The board kept changing while the AI looked (${this.aiDiscarded} times, ${Math.round(this.aiMs || 0)} ms per look). Keep hands, shadows and the tablet still, then run the check again.`;
+    if (S.run.now() - this.lastChange < this.settleMs) return 'The camera keeps seeing movement on the board (people, shadows, flickering light or a wobbling stand). Keep it still, then run the check again.';
+    return 'The camera AI has not looked at the board yet.';
   }
   read() {
     const now = S.run.now();

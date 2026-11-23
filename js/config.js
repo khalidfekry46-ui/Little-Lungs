@@ -3,7 +3,7 @@
 window.S = window.S || {};
 
 S.APP_VERSION = '1.2.0';
-S.BUILD = '1.9.2';   /* keep equal to VERSION in sw.js */
+S.BUILD = '1.9.3';   /* keep equal to VERSION in sw.js */
 S.APP_NAME = 'Little Lungs: Smart Anatomy Test';
 S.CONTACT_EMAIL = 'Khalidfekry46@gmail.com';
 
@@ -66,6 +66,7 @@ S.TEXT = {
   p19_time_up: 'Time is up for this passage.',
   p06_t1_directions: 'Task 1: Anatomy assembly. You will hear one instruction at a time. Take the correct piece from the tray and place it on the board. Then move your hand away so the camera can check it. You have thirty seconds for each piece. After each check, return the piece to the tray. Tap Start when you are ready.',
   p07_move_hand: 'Please move your hand away from the board so I can check your answer.',
+  markers_covered: 'Please keep all 4 black corner squares uncovered, so the camera can see the board.',
   p07_10s_left: 'Ten seconds left.',
   p07_time_up: 'Time is up. Please return the piece to the tray.',
   p07_recorded: 'Answer recorded. Please return the piece to the tray.',
@@ -161,6 +162,7 @@ S.TIMING = {
   passageMs: 300000,
   restMs: 15000,
   stableMs: 1500,
+  letGoMs: 4000,     /* still this long with a piece half outside a zone: judged as placed */
   handNagMs: 5000,
   breathWaitMs: 1500,
   maxExtraBreaths: 2

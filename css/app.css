@@ -630,3 +630,10 @@ select.inline { width: auto; min-height: 44px; }
 .aiguess { display: block; font-weight: 700; color: #137A3D; }
 .aiguess.unsure { color: var(--warn); }
 .bc-crops canvas { width: 150px; height: 150px; }
+
+/* Live camera view for the operator and student: corner markers only, never the zones */
+.cam-preview { margin: 0; display: flex; flex-direction: column; gap: .5rem; align-items: stretch; }
+.cam-preview canvas { width: 100%; max-width: 520px; max-height: 52vh; object-fit: contain; border-radius: 12px; background: #000; border: 3px solid #1f9d55; }
+.cam-preview.bad canvas { border-color: #d93025; }
+.cam-preview figcaption { font-size: 1rem; font-weight: 600; color: #1f6f3f; }
+.cam-preview.bad figcaption { color: #b3261e; }

@@ -66,5 +66,10 @@ S.audio = (() => {
     if (p && p.catch) p.catch(() => {});
   }
 
-  return { play, cue, replay, stop, pauseAll, resumeAll, setMain, onMain, sayScore, unlock, setMuted: m => { muted = m; }, get lastMain() { return lastMain; } };
+  /* Short spoken message with the device's own voice, for messages that have no recording */
+  function say(text) {
+    if (muted || !window.speechSynthesis || S.run.speed > 1) return;
+    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; u.rate = 0.95; speechSynthesis.speak(u); } catch (e) { /* no voice */ }
+  }
+  return { play, cue, say, replay, stop, pauseAll, resumeAll, setMain, onMain, sayScore, unlock, setMuted: m => { muted = m; }, get lastMain() { return lastMain; } };
 })();

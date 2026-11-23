@@ -220,7 +220,10 @@ S.test = (() => {
   }
 
   async function pWaitOperator() {
-    page = S.ui.studentPage({ code: 'P04', lead: S.TEXT.p04_wait_operator, clip: 'p04_wait_operator', center: true, verity: 'big' });
+    const cam = S.vision.preview();
+    page = cam
+      ? S.ui.studentPage({ code: 'P04', lead: S.TEXT.p04_wait_operator, text: 'Operator: check the camera picture. All 4 black corner squares should have a green frame.', clip: 'p04_wait_operator', visual: cam })
+      : S.ui.studentPage({ code: 'P04', lead: S.TEXT.p04_wait_operator, clip: 'p04_wait_operator', center: true, verity: 'big' });
     playMain('p04_wait_operator');
     await operatorGate('Operator: continue', 'Operator checklist');
     const items = [
@@ -285,17 +288,26 @@ S.test = (() => {
 
   async function waitPlacement(target, ms, since, total) {
     const thr = S.settings.get().confThreshold;
-    let warned = false, nagged = false, handSince = null, firstHand = null;
+    let warned = false, nagged = false, handSince = null, firstHand = null, markerNagAt = null;
+    const start = observe();
+    const base = Object.fromEntries(S.ORGANS.map(z => [z, start.zones[z] ? start.zones[z].cls : 'empty']));
     const r = await S.run.until(el => {
       const o = observe();
+      /* A corner marker covered for 3 s: ask the student to uncover it (says nothing about where pieces go) */
+      const hidSince = S.vision.hiddenSince;
+      if (hidSince != null && now() - hidSince > 3000 && (markerNagAt == null || now() - markerNagAt > 12000)) {
+        markerNagAt = now();
+        S.ui.toast(S.TEXT.markers_covered);
+        S.audio.say(S.TEXT.markers_covered);
+      }
       const remaining = ms - el;
       S.ui.setTimer(page, remaining, total || ms);
       if (!warned && remaining <= 10000 && ms >= 20000) { warned = true; S.audio.cue('p07_10s_left'); }
       if (o.hand) { if (handSince == null) handSince = now(); if (firstHand == null) firstHand = now(); }
       else handSince = null;
-      if (!nagged && handSince != null && now() - handSince > T.handNagMs && !S.boardEmpty(o.zones)) { nagged = true; S.audio.cue('p07_move_hand'); }
+      if (!nagged && handSince != null && now() - handSince > T.handNagMs && !S.vision.markersHidden && !S.boardEmpty(o.zones)) { nagged = true; S.audio.cue('p07_move_hand'); }
       if (o.hand || o.stableMs < T.stableMs || o.changedAt <= since) return null;
-      const j = S.judge(target, o.zones, thr);
+      const j = S.judge(target, o.zones, thr, { base, long: o.stableMs >= T.letGoMs });
       return j ? { ...j, handClearAt: o.handClearAt, firstHand } : null;
     }, ms);
     if (!r.ok) return { timeout: true };
@@ -336,7 +348,7 @@ S.test = (() => {
 
   async function placementItem(it) {
     const clip = `p07_${it.organ}_L${it.level}`;
-    page = S.ui.studentPage({ code: 'P07', progress: `Task 1 of 2, piece ${it.n} of 5`, lead: S.PROMPTS[it.organ][it.level], clip });
+    page = S.ui.studentPage({ code: 'P07', progress: `Task 1 of 2, piece ${it.n} of 5`, lead: S.PROMPTS[it.organ][it.level], clip, visual: S.vision.preview() });
     S.ui.simPanel.setTarget(it.organ);
     S.ui.setTimer(page, T.itemMs, T.itemMs);
     await playMain(clip);
@@ -383,7 +395,7 @@ S.test = (() => {
     page = S.ui.studentPage({ code: 'P08', progress: 'Task 1 of 2, full build', title: P.P08.title, text: P.P08.body, clip: 'p08_build_directions', visual: S.art.organsScan() });
     playMain('p08_build_directions');
     await tapNext('Start', { auto: true });
-    page = S.ui.studentPage({ code: 'P09', progress: 'Task 1 of 2, full build', lead: 'Build the complete chest model.', text: 'Tap Done when you have finished.', clip: 'p08_build_directions' });
+    page = S.ui.studentPage({ code: 'P09', progress: 'Task 1 of 2, full build', lead: 'Build the complete chest model.', text: 'Tap Done when you have finished.', clip: 'p08_build_directions', visual: S.vision.preview() });
     const build = { pieces: [], timeout: false, points: 0 };
     session.t1.build = build;
     let doneTap = false;
