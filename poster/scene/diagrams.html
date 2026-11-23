@@ -1,0 +1,81 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#fff;font-family:'Liberation Serif','Times New Roman',serif}
+.fig{display:inline-block;padding:20px;background:#fff}
+text{font-family:'Liberation Serif','Times New Roman',serif}
+</style></head><body>
+<!-- 1. System architecture -->
+<div class="fig" id="arch"><svg width="1900" height="980" viewBox="0 0 1900 980">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0B1F45"/></marker>
+<marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2F6FDB"/></marker>
+<marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#C77A1E"/></marker>
+</defs>
+<style>.box{rx:16}.t{font-size:30px;font-weight:bold;fill:#0B1F45}.s{font-size:22px;fill:#3B4A66}.w{fill:#fff}.lane{font-size:24px;font-weight:bold;letter-spacing:2px}</style>
+<!-- lanes -->
+<rect x="10" y="10" width="560" height="960" rx="22" fill="#FFF6EA" stroke="#E7A24A" stroke-width="3" stroke-dasharray="14 10"/>
+<text x="290" y="56" text-anchor="middle" class="lane" fill="#8A4B00">TASK 2 SENSORS (PLANNED)</text>
+<rect x="610" y="10" width="760" height="960" rx="22" fill="#F1F5FC" stroke="#2F6FDB" stroke-width="3"/>
+<text x="990" y="56" text-anchor="middle" class="lane" fill="#1F3A73">HUAWEI MATEPAD 11.5 (BUILT)</text>
+<rect x="1410" y="10" width="480" height="960" rx="22" fill="#FFF6EA" stroke="#E7A24A" stroke-width="3" stroke-dasharray="14 10"/>
+<text x="1650" y="56" text-anchor="middle" class="lane" fill="#8A4B00">CLOUD (PLANNED)</text>
+<!-- sensors -->
+<g><rect x="50" y="100" width="480" height="130" rx="16" fill="#fff" stroke="#E7A24A" stroke-width="3"/><text x="80" y="150" class="t">Chest belt</text><text x="80" y="190" class="s">Linear potentiometer (stretch → resistance)</text></g>
+<g><rect x="50" y="260" width="480" height="130" rx="16" fill="#fff" stroke="#E7A24A" stroke-width="3"/><text x="80" y="310" class="t">Abdomen belt</text><text x="80" y="350" class="s">Linear potentiometer (stretch → resistance)</text></g>
+<g><rect x="50" y="420" width="480" height="130" rx="16" fill="#fff" stroke="#E7A24A" stroke-width="3"/><text x="80" y="470" class="t">MAX30102 finger sensor</text><text x="80" y="510" class="s">Red + infrared light → pulse (PPG) → bpm</text></g>
+<g><rect x="50" y="640" width="480" height="230" rx="16" fill="#1B7F3B"/><text x="80" y="695" class="t w">Raspberry Pi Pico W</text>
+<text x="80" y="738" class="s w">ADC reads both belts 10–20 times a second</text><text x="80" y="772" class="s w">I²C reads the MAX30102</text><text x="80" y="806" class="s w">Filters signals, labels each breath</text><text x="80" y="840" class="s w">(diaphragmatic / thoracic / unclear)</text></g>
+<path d="M290,230 L290,258" stroke="#C77A1E" stroke-width="0"/>
+<path d="M530,165 H556 V690 H538" fill="none" stroke="#C77A1E" stroke-width="4" marker-end="url(#ao)"/>
+<path d="M530,325 H545 V720 H538" fill="none" stroke="#C77A1E" stroke-width="4" marker-end="url(#ao)"/>
+<path d="M290,550 L290,632" fill="none" stroke="#C77A1E" stroke-width="4" marker-end="url(#ao)"/>
+<!-- tablet internals -->
+<g><rect x="650" y="100" width="330" height="150" rx="16" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="675" y="150" class="t">Back camera</text><text x="675" y="190" class="s">Full-HD frames of the</text><text x="675" y="220" class="s">board, 4 per second</text></g>
+<g><rect x="1010" y="100" width="330" height="150" rx="16" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="1035" y="150" class="t">Marker finder</text><text x="1035" y="190" class="s">4 ArUco markers → board</text><text x="1035" y="220" class="s">straightened, 5 zones cut</text></g>
+<g><rect x="1010" y="290" width="330" height="190" rx="16" fill="#0B1F45"/><text x="1035" y="340" class="t w">Zone AI</text><text x="1035" y="380" class="s w">MobileNetV2 + trained</text><text x="1035" y="410" class="s w">head, on the GPU (WebGL)</text><text x="1035" y="445" class="s w">10 categories per zone</text></g>
+<g><rect x="650" y="290" width="330" height="190" rx="16" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="675" y="340" class="t">Stillness + hand</text><text x="675" y="380" class="s">checks: judge only when</text><text x="675" y="410" class="s">the board is still and</text><text x="675" y="440" class="s">no hand is in view</text></g>
+<g><rect x="650" y="520" width="690" height="190" rx="16" fill="#E5486B"/><text x="675" y="570" class="t w">Test app (P01–P22) with Verity's voice</text><text x="675" y="610" class="s w">Task 1: adaptive placement + full build · Task 2: paced breathing,</text><text x="675" y="642" class="s w">graph questions, knowledge questions, adaptive reading</text><text x="675" y="674" class="s w">Score out of 10 · operator PIN steps · student passwords</text></g>
+<g><rect x="650" y="750" width="690" height="170" rx="16" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="675" y="800" class="t">Saved on the tablet first (IndexedDB)</text><text x="675" y="840" class="s">Works offline · History, Review (ground truth), Statistics</text><text x="675" y="872" class="s">with 95% Wilson intervals, CSV export</text></g>
+<path d="M980,175 L1006,175" stroke="#0B1F45" stroke-width="4" marker-end="url(#a)"/>
+<path d="M1175,250 L1175,286" stroke="#0B1F45" stroke-width="4" marker-end="url(#a)"/>
+<path d="M1010,385 L984,385" stroke="#0B1F45" stroke-width="4" marker-end="url(#a)"/>
+<path d="M815,480 L815,516" stroke="#0B1F45" stroke-width="4" marker-end="url(#a)"/>
+<path d="M995,710 L995,746" stroke="#0B1F45" stroke-width="4" marker-end="url(#a)"/>
+<!-- Pico to tablet -->
+<path d="M530,820 C600,820 590,640 646,640" fill="none" stroke="#2F6FDB" stroke-width="4" stroke-dasharray="12 9" marker-end="url(#ab)"/>
+<text x="290" y="910" text-anchor="middle" class="s" style="font-size:21px;fill:#1F3A73">Wi-Fi: JSON messages (belts, hr, breath)</text>
+<!-- cloud -->
+<g><rect x="1450" y="520" width="400" height="190" rx="16" fill="#fff" stroke="#E7A24A" stroke-width="3"/><text x="1475" y="570" class="t">Google Apps Script</text><text x="1475" y="610" class="s">Receives each finished</text><text x="1475" y="640" class="s">session when online;</text><text x="1475" y="670" class="s">retries, no duplicates</text></g>
+<g><rect x="1450" y="750" width="400" height="170" rx="16" fill="#1E8E4E"/><text x="1475" y="800" class="t w">Google Sheet</text><text x="1475" y="840" class="s w">Roster, Sessions, Placements,</text><text x="1475" y="872" class="s w">Trials, Breaths, Answers…</text></g>
+<path d="M1340,835 C1400,835 1390,640 1446,640" fill="none" stroke="#2F6FDB" stroke-width="4" stroke-dasharray="12 9" marker-end="url(#ab)"/>
+<path d="M1650,710 L1650,746" stroke="#0B1F45" stroke-width="4" marker-end="url(#a)"/>
+<text x="1395" y="900" text-anchor="middle" class="s" style="font-size:20px;fill:#1F3A73">HTTPS</text>
+</svg></div>
+
+<!-- 2. Decision flow for one placement -->
+<div class="fig" id="flow"><svg width="1900" height="760" viewBox="0 0 1900 760">
+<defs><marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0B1F45"/></marker></defs>
+<style>.t{font-size:27px;font-weight:bold;fill:#0B1F45}.s{font-size:21px;fill:#3B4A66}.w{fill:#fff}.y{font-size:21px;font-weight:bold;fill:#2E9D6B}.n{font-size:21px;font-weight:bold;fill:#E5486B}</style>
+<rect x="20" y="300" width="250" height="140" rx="16" fill="#0B1F45"/><text x="145" y="358" text-anchor="middle" class="t w">Prompt played</text><text x="145" y="395" text-anchor="middle" class="s w">"Place the heart."</text>
+<path d="M270,370 L330,370" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/>
+<polygon points="470,270 610,370 470,470 330,370" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="470" y="360" text-anchor="middle" class="t" style="font-size:23px">All 4 markers</text><text x="470" y="392" text-anchor="middle" class="t" style="font-size:23px">visible?</text>
+<polygon points="790,270 930,370 790,470 650,370" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="790" y="352" text-anchor="middle" class="t" style="font-size:23px">Board still</text><text x="790" y="384" text-anchor="middle" class="t" style="font-size:23px">for 1.5 s?</text>
+<polygon points="1110,270 1250,370 1110,470 970,370" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="1110" y="352" text-anchor="middle" class="t" style="font-size:23px">AI sees a</text><text x="1110" y="384" text-anchor="middle" class="t" style="font-size:23px">hand?</text>
+<polygon points="1440,270 1590,370 1440,470 1290,370" fill="#fff" stroke="#2F6FDB" stroke-width="3"/><text x="1440" y="360" text-anchor="middle" class="t" style="font-size:22px">AI ≥ 80% sure</text><text x="1440" y="390" text-anchor="middle" class="t" style="font-size:22px">either way?</text>
+<path d="M610,370 L646,370" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="618" y="356" class="y">yes</text>
+<path d="M930,370 L966,370" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="938" y="356" class="y">yes</text>
+<path d="M1250,370 L1286,370" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="1256" y="356" class="n">no</text>
+<path d="M1590,370 L1640,370" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="1596" y="356" class="y">yes</text>
+<rect x="1645" y="250" width="235" height="240" rx="16" fill="#2E9D6B"/><text x="1762" y="320" text-anchor="middle" class="t w">Verdict</text><text x="1762" y="362" text-anchor="middle" class="s w">correct, or wrong:</text><text x="1762" y="392" text-anchor="middle" class="s w">wrong piece, wrong</text><text x="1762" y="422" text-anchor="middle" class="s w">zone, flipped, upside</text><text x="1762" y="452" text-anchor="middle" class="s w">down, left/right swap</text>
+<!-- no branches -->
+<path d="M470,270 L470,170" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="482" y="225" class="n">no</text>
+<rect x="330" y="40" width="440" height="126" rx="16" fill="#FDE8ED" stroke="#E5486B" stroke-width="2"/><text x="550" y="92" text-anchor="middle" class="t" style="font-size:24px">Treated as a hand: wait</text><text x="550" y="130" text-anchor="middle" class="s">a covered marker is usually an arm</text>
+<path d="M790,270 L790,170" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="802" y="225" class="n">no</text>
+<rect x="800" y="40" width="380" height="126" rx="16" fill="#EEF2F8" stroke="#9AA3B5" stroke-width="2"/><text x="990" y="92" text-anchor="middle" class="t" style="font-size:24px">Keep watching</text><text x="990" y="130" text-anchor="middle" class="s">frames compared 4 times a second</text>
+<path d="M1110,470 L1110,560" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="1122" y="520" class="y">yes</text>
+<rect x="890" y="565" width="440" height="150" rx="16" fill="#FDE8ED" stroke="#E5486B" stroke-width="2"/><text x="1110" y="617" text-anchor="middle" class="t" style="font-size:24px">Not judged; after 5 s</text><text x="1110" y="655" text-anchor="middle" class="s">"Please move your hand away</text><text x="1110" y="685" text-anchor="middle" class="s">from the board."</text>
+<path d="M1440,470 L1440,560" stroke="#0B1F45" stroke-width="4" marker-end="url(#f)"/><text x="1452" y="520" class="n">no</text>
+<rect x="1360" y="565" width="520" height="150" rx="16" fill="#FFF6EA" stroke="#E7A24A" stroke-width="2"/><text x="1620" y="617" text-anchor="middle" class="t" style="font-size:24px">Operator decides</text><text x="1620" y="655" text-anchor="middle" class="s">"Is this piece placed correctly?"</text><text x="1620" y="685" text-anchor="middle" class="s">(3% of zones in session 5)</text>
+<text x="20" y="560" class="s" style="font-size:20px">A piece partly outside its box is also not judged</text><text x="20" y="588" class="s" style="font-size:20px">until it settles. Each item has 30 s; a wrong first</text><text x="20" y="616" class="s" style="font-size:20px">try earns a hint and 20 more seconds.</text>
+</svg></div>
+<script>window.DONE=true</script>
+</body></html>
