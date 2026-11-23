@@ -42,7 +42,7 @@ S.admin = (() => {
   function frame(title, content, active) {
     const nav = [['overview', 'Overview', overview], ['review', 'Review', reviewList], ['stats', 'Statistics', stats], ['photos', 'Board photos', photos], ['boardcheck', 'Board check', boardCheckPage], ['collect', 'Collect photos', collectPage], ['settings', 'Settings', settings]];
     const st = S.settings.get();
-    const modes = [st.picoMode === 'sim' ? 'Pico: simulator' : 'Pico: live', st.visionMode === 'sim' ? 'Camera AI: simulator' : 'Camera AI: live'];
+    const modes = [st.picoMode === 'sim' ? 'Pico: simulator' : st.picoMode === 'ble' ? 'Pico: Bluetooth' : 'Pico: live', st.visionMode === 'sim' ? 'Camera AI: simulator' : 'Camera AI: live'];
     return mainFrame('manage', h('div', null,
       h('div', { class: 'subbar' },
         h('nav', { class: 'opnav sub', 'aria-label': 'Management' }, nav.map(([k, label, fn]) => h('button', { type: 'button', class: k === active ? 'on' : '', 'aria-current': k === active ? 'page' : null, onclick: () => fn() }, label))),
@@ -245,10 +245,17 @@ S.admin = (() => {
     } else add('empty', 'Board empty', 'fail', 'The camera AI is not ready');
 
     /* Pico */
+    const pst = S.settings.get();
+    if (pst.picoMode === 'ble' && !S.PicoBLE.chosen()) {
+      /* The browser only shows its Bluetooth list after a tap, so ask first */
+      const go = await S.ui.confirmBox('Connect to the Pico W', 'Switch the station battery on, tap Connect, then choose LittleLungs in the list.', 'Connect', 'Skip');
+      if (go) { try { await S.PicoBLE.choose(); } catch (e) { /* cancelled or no Bluetooth: reported below */ } }
+    }
     S.makePico();
     const connected = await S.pico.connect();
     const pong = connected ? await S.pico.ping() : null;
-    add('pico', 'Pico W connection', pong ? (pong.rtt > 400 ? 'warn' : 'pass') : 'fail', pong ? `Firmware ${pong.fw}, ${Math.round(pong.rtt)} ms reply` : `No reply from ${S.settings.get().picoUrl}`);
+    const where = pst.picoMode === 'ble' ? (S.pico.error || 'No reply over Bluetooth. Is the Pico switched on and running main.py?') : `No reply from ${pst.picoUrl}`;
+    add('pico', 'Pico W connection', pong ? (pong.rtt > 400 ? 'warn' : 'pass') : 'fail', pong ? `Firmware ${pong.fw}, ${Math.round(pong.rtt)} ms reply${pst.picoMode === 'ble' ? ' over Bluetooth' : ''}` : where);
     const ps = S.pico.status();
     add('hr', 'Heart sensor', !pong ? 'fail' : !ps.hrSensor ? 'fail' : ps.finger ? 'fail' : 'pass', !pong ? 'Pico not connected' : ps.finger ? 'Finger detected while idle. Remove the clip or check the sensor.' : 'Responds, no finger detected');
 
@@ -611,8 +618,8 @@ S.admin = (() => {
         field('deviceLabel', 'Device name', text('deviceLabel'), 'Shown in the data, e.g. MatePad or Phone A.'),
         field('deviceCode', 'Short code', text('deviceCode', { maxlength: 4 }), '2 to 4 letters. Student codes start with it, e.g. MP-014.')),
       h('section', null, h('h2', null, 'Hardware'),
-        field('picoMode', 'Pico W', select('picoMode', [['sim', 'Simulator'], ['live', 'Live Pico W']])),
-        field('picoUrl', 'Pico W address', text('picoUrl'), 'WebSocket address of the Pico, e.g. ws://192.168.1.50:8080. See docs/pico-protocol.md.'),
+        field('picoMode', 'Pico W', select('picoMode', [['sim', 'Simulator'], ['ble', 'Live Pico W (Bluetooth)'], ['live', 'Live Pico W (WebSocket, bench only)']])),
+        field('picoUrl', 'Pico W address', text('picoUrl'), 'Only for the WebSocket bench mode, e.g. ws://192.168.1.50:8080. The station uses Bluetooth. See docs/pico-protocol.md.'),
         field('visionMode', 'Camera AI', select('visionMode', [['sim', 'Simulator'], ['live', 'Live camera and model']]), 'Live needs the trained model. Until then the station check stays red in live mode.'),
         field('mirrorDuringTrials', 'Lung model mirrors breathing during scored trials', check('mirrorDuringTrials'), 'Off by default, because it shows the student whether the belly is moving.')),
       h('section', null, h('h2', null, 'Camera'),

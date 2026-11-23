@@ -1,6 +1,8 @@
 /* Pico W link. Two interchangeable versions:
    - PicoSim: generates realistic belt, heart-rate and breath data so the app runs without hardware.
-   - PicoWS: talks to the real Pico W with the JSON messages in docs/pico-protocol.md.
+   - PicoWS: talks to a Pico over a WebSocket (kept for bench tests on a laptop).
+   - PicoBLE: talks to the real Pico W over Bluetooth Low Energy (the station's link).
+   All real links use the JSON messages in docs/pico-protocol.md, one message per line.
    The rest of the app only uses the methods below, so swapping is one setting. */
 window.S = window.S || {};
 
@@ -167,10 +169,107 @@ class PicoWS extends S.Emitter {
   disconnect() { if (this.ws) this.ws.close(); }
 }
 
+/* Bluetooth Low Energy link (Web Bluetooth, Nordic UART service).
+   The Pico sends JSON lines on TX (notify); the tablet writes JSON lines to RX.
+   One Bluetooth packet holds 20 bytes by default, so lines are cut into pieces and joined again. */
+const NUS = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+let bleDevice = null;            /* survives S.makePico(), so the operator picks the Pico once per app start */
+
+class PicoBLE extends PicoWS {
+  constructor() {
+    super(null);
+    this.kind = 'ble';
+    this.rx = null;
+    this.buf = '';
+    this.queue = Promise.resolve();
+    this.error = '';
+    this.wantConnected = false;
+    this._onDisc = () => this.onDisconnect();
+    this._onData = ev => this.onChunk(ev.target.value);
+  }
+  static available() { return !!(navigator.bluetooth && navigator.bluetooth.requestDevice); }
+  static chosen() { return !!bleDevice; }
+  static deviceName() { return bleDevice ? bleDevice.name : ''; }
+  /* Must run from a tap: the browser only opens its device list after a user gesture */
+  static async choose() {
+    if (!PicoBLE.available()) throw new Error('This browser has no Web Bluetooth (use Chrome on the tablet)');
+    bleDevice = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'LittleLungs' }, { services: [NUS] }], optionalServices: [NUS] });
+    return bleDevice.name;
+  }
+  async connect() {
+    this.error = '';
+    if (!bleDevice) { this.error = 'No Pico chosen yet: tap Connect and pick LittleLungs'; return false; }
+    this.wantConnected = true;
+    bleDevice.removeEventListener('gattserverdisconnected', this._onDisc);
+    bleDevice.addEventListener('gattserverdisconnected', this._onDisc);
+    try {
+      const server = await withTimeout(bleDevice.gatt.connect(), 8000);
+      const svc = await server.getPrimaryService(NUS);
+      this.rx = await svc.getCharacteristic(NUS_RX);
+      const tx = await svc.getCharacteristic(NUS_TX);
+      tx.removeEventListener('characteristicvaluechanged', this._onData);
+      tx.addEventListener('characteristicvaluechanged', this._onData);
+      await tx.startNotifications();
+      this.connected = true;
+      this.buf = '';
+      this.emit('link', { connected: true });
+      return true;
+    } catch (e) {
+      this.error = 'Bluetooth: ' + (e.message || e);
+      this.connected = false;
+      return false;
+    }
+  }
+  onChunk(view) {
+    this.buf += new TextDecoder().decode(view);
+    let i;
+    while ((i = this.buf.indexOf('\n')) >= 0) {
+      const line = this.buf.slice(0, i).trim();
+      this.buf = this.buf.slice(i + 1);
+      if (line) this.onMessage(line);
+    }
+    if (this.buf.length > 4000) this.buf = '';
+  }
+  send(obj) {
+    if (!this.connected || !this.rx) return;
+    const bytes = new TextEncoder().encode(JSON.stringify(obj) + '\n');
+    this.queue = this.queue.then(async () => {
+      for (let i = 0; i < bytes.length; i += 20) {
+        const part = bytes.slice(i, i + 20);
+        if (this.rx.writeValueWithoutResponse) await this.rx.writeValueWithoutResponse(part);
+        else await this.rx.writeValue(part);
+      }
+    }).catch(e => { this.error = 'Bluetooth send: ' + (e.message || e); });
+  }
+  /* Out of range or Pico restarted: keep trying every 2 s while the app wants the link */
+  async onDisconnect() {
+    this.connected = false;
+    this._status = Object.assign({}, this._status, { beltsInRange: false, finger: false });
+    this.emit('status', this._status);
+    this.emit('link', { connected: false });
+    while (this.wantConnected && !this.connected) {
+      await new Promise(r => setTimeout(r, 2000));
+      if (this.wantConnected && !this.connected && bleDevice) await this.connect();
+    }
+  }
+  disconnect() {
+    this.wantConnected = false;
+    if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+    this.connected = false;
+  }
+}
+S.PicoBLE = PicoBLE;
+
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timed out')), ms))]);
+}
+
 S.pico = null;
 S.makePico = function () {
   if (S.pico) S.pico.disconnect();
   const st = S.settings.get();
-  S.pico = st.picoMode === 'live' ? new PicoWS(st.picoUrl) : new PicoSim();
+  S.pico = st.picoMode === 'ble' ? new PicoBLE() : st.picoMode === 'live' ? new PicoWS(st.picoUrl) : new PicoSim();
   return S.pico;
 };

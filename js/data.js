@@ -118,7 +118,29 @@ S.flatten = function (s) {
     reading_path: (rdg.path || []).join('>'), reading_moved_up: !!rdg.moved_up,
     graph_correct: (s.t2.answers || []).filter(a => String(a.qid).startsWith('B') && a.correct).length
   });
-  return { Roster: roster, Sessions: sessions, Placements: placements, Trials: trials, Breaths: breaths, Answers: answers, Reading: reading, Events: events };
+  return { Roster: roster, Sessions: sessions, Placements: placements, Trials: trials, Breaths: breaths, Answers: answers, Reading: reading, Events: events, Sensors: S.sensorRows(s, base, simulated) };
+};
+
+/* One row per second of Pico data: belt range and mean, heart rate and signal quality.
+   t_s is test time (pauses removed); time is the clock time it maps to. */
+S.sensorRows = function (s, base, simulated) {
+  const raw = s.raw || {};
+  const secs = new Map();
+  const slot = t => { const k = Math.floor(t / 1000); if (!secs.has(k)) secs.set(k, { c: [], a: [], hr: [], q: [] }); return secs.get(k); };
+  (raw.belts || []).forEach(b => { const x = slot(b.t); x.c.push(b.chest); x.a.push(b.abd); });
+  (raw.hr || []).forEach(h => { const x = slot(h.t); if (h.bpm > 0) x.hr.push(h.bpm); x.q.push(h.q); });
+  const t0 = s.started_at ? new Date(s.started_at).getTime() : null;
+  const mean = v => v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  const f = v => (v == null ? null : +v.toFixed(1));
+  return [...secs.keys()].sort((a, b) => a - b).map(k => {
+    const x = secs.get(k);
+    return {
+      ...base, simulated, t_s: k, time: t0 != null ? new Date(t0 + k * 1000).toISOString() : '',
+      chest_min: x.c.length ? f(Math.min(...x.c)) : null, chest_max: x.c.length ? f(Math.max(...x.c)) : null, chest_mean: f(mean(x.c)),
+      abd_min: x.a.length ? f(Math.min(...x.a)) : null, abd_max: x.a.length ? f(Math.max(...x.a)) : null, abd_mean: f(mean(x.a)),
+      hr_bpm: f(mean(x.hr)), hr_q: x.q.length ? +mean(x.q).toFixed(2) : null, belt_samples: x.c.length
+    };
+  });
 };
 
 S.flattenAll = function (list) {

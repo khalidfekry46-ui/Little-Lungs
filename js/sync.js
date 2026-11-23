@@ -111,5 +111,53 @@ S.sync = (() => {
     timer = setInterval(() => { if (navigator.onLine && st().syncUrl && !S.test.session) all().catch(() => {}); }, 120000);
   }
 
-  return { session, prep, all, pendingCount, needsUpload, exportAll, photo, remove, startAuto };
+  /* Live upload during a session. Every 10 s the session is saved on the tablet and any rows
+     not yet in the Sheet are sent: the student and session rows are replaced, all other rows
+     (placements, breaths, answers, events, one sensor row per second) are appended.
+     A row that changes later (for example a second attempt) can appear twice in the Sheet
+     for a short time; the full upload at the end of the session replaces all of that
+     session's rows, which removes the duplicates. Offline, rows wait and go on the next try. */
+  const live = (() => {
+    const REPLACE = ['Roster', 'Sessions'];
+    let timer = null, getS = null, sent = new Set(), busy = false, lastOk = null, lastErr = '';
+    async function tick() {
+      const s = getS && getS();
+      if (!s || busy) return;
+      busy = true;
+      try {
+        await S.store.saveSession(s);
+        if (s.demo || !st().syncUrl || !navigator.onLine) return;
+        let tables;
+        try { tables = S.flatten(s); } catch (e) { return; }
+        const replace = {}, append = {}, keys = [];
+        let n = 0;
+        Object.keys(tables).forEach(name => {
+          if (REPLACE.includes(name)) {
+            const k = name + JSON.stringify(tables[name]);
+            if (!sent.has(k)) { replace[name] = tables[name]; keys.push(k); n++; }
+            return;
+          }
+          const rows = tables[name].filter(r => { const k = name + JSON.stringify(r); if (sent.has(k)) return false; keys.push(k); return true; });
+          if (rows.length) { append[name] = rows; n += rows.length; }
+        });
+        if (!n) return;
+        await post({ key: st().syncKey, type: 'live', session_id: s.id, replace, append });
+        keys.forEach(k => sent.add(k));
+        lastOk = new Date();
+        lastErr = '';
+      } catch (e) {
+        lastErr = e.message || String(e);
+      } finally { busy = false; }
+    }
+    function start(fn, everyMs = 10000) {
+      stop();
+      getS = fn;
+      sent = new Set();
+      timer = setInterval(tick, everyMs);
+    }
+    function stop() { clearInterval(timer); timer = null; getS = null; }
+    return { start, stop, tick, state: () => ({ running: !!timer, lastOk, lastErr }) };
+  })();
+
+  return { session, prep, all, pendingCount, needsUpload, exportAll, photo, remove, startAuto, live };
 })();

@@ -9,10 +9,12 @@
  * 4. Copy the web app URL (ends in /exec) into the app under Settings > Cloud link.
  * After editing this file, use Deploy > Manage deployments > Edit > New version.
  *
- * Each upload replaces that session's rows, so re-uploading after ground truth is added never duplicates data.
+ * Each full upload replaces that session's rows, so re-uploading after ground truth is added never duplicates data.
+ * During a session the app also sends 'live' uploads every 10 s: Roster and Sessions rows are replaced,
+ * other rows (including one Sensors row per second) are appended. The full upload at the end tidies everything.
  */
 
-var TABS = ['Roster', 'Sessions', 'Placements', 'Trials', 'Breaths', 'Answers', 'Reading', 'Prep', 'Events'];
+var TABS = ['Roster', 'Sessions', 'Placements', 'Trials', 'Breaths', 'Answers', 'Reading', 'Prep', 'Events', 'Sensors'];
 var PHOTO_FOLDER = 'Anatomy Station board photos';
 
 function doPost(e) {
@@ -26,6 +28,15 @@ function doPost(e) {
       var book = SpreadsheetApp.getActiveSpreadsheet();
       TABS.forEach(function (name) { if (book.getSheetByName(name)) upsert(book, name, body.session_id, []); });
       return json({ ok: true, deleted: body.session_id });
+    }
+    if (body.type === 'live') {
+      if (!body.session_id) return json({ ok: false, error: 'Missing session id' });
+      var bk = SpreadsheetApp.getActiveSpreadsheet();
+      TABS.forEach(function (name) {
+        if (body.replace && body.replace[name]) upsert(bk, name, body.session_id, body.replace[name]);
+        if (body.append && body.append[name] && body.append[name].length) appendRows(bk, name, body.append[name]);
+      });
+      return json({ ok: true, session_id: body.session_id, live: true });
     }
     if (!body.session_id || !body.tables) return json({ ok: false, error: 'Missing session data' });
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -66,21 +77,45 @@ function keyOk(k) {
   return !key || k === key;
 }
 
-function upsert(ss, name, sid, rows) {
+/* Make sure the tab exists and its header row has every column used by these rows */
+function prepare(ss, name, rows) {
   var sh = ss.getSheetByName(name) || ss.insertSheet(name);
   var header = sh.getLastRow() > 0 ? sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].filter(String) : [];
   rows.forEach(function (r) {
     Object.keys(r).forEach(function (k) { if (header.indexOf(k) < 0) header.push(k); });
   });
+  if (header.length) {
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+    sh.setFrozenRows(1);
+  }
+  return { sh: sh, header: header };
+}
+
+function upsert(ss, name, sid, rows) {
+  var p = prepare(ss, name, rows), sh = p.sh, header = p.header;
   if (!header.length) return;
-  sh.getRange(1, 1, 1, header.length).setValues([header]);
-  sh.setFrozenRows(1);
   var col = header.indexOf('session_id') + 1;
   var last = sh.getLastRow();
   if (last > 1 && col > 0) {
+    /* delete this session's rows in blocks (one call per run of neighbouring rows, not per row) */
     var ids = sh.getRange(2, col, last - 1, 1).getValues();
-    for (var i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]) === String(sid)) sh.deleteRow(i + 2);
+    var i = ids.length - 1;
+    while (i >= 0) {
+      if (String(ids[i][0]) !== String(sid)) { i--; continue; }
+      var end = i;
+      while (i >= 0 && String(ids[i][0]) === String(sid)) i--;
+      sh.deleteRows(i + 3, end - i);
+    }
   }
+  writeRows(sh, header, rows);
+}
+
+function appendRows(ss, name, rows) {
+  var p = prepare(ss, name, rows);
+  if (p.header.length) writeRows(p.sh, p.header, rows);
+}
+
+function writeRows(sh, header, rows) {
   if (!rows.length) return;
   var values = rows.map(function (r) {
     return header.map(function (k) {

@@ -70,6 +70,7 @@ S.test = (() => {
     session.station = stationResult;
     log('session_start');
     await save();
+    S.sync.live.start(() => session);
     let status = 'completed', note = '';
     try {
       await pWelcome();
@@ -102,6 +103,7 @@ S.test = (() => {
     session.end = { status, note };
     delete session._abortNote;
     log('session_end', status);
+    S.sync.live.stop();
     await save();
     S.sync.session(session).catch(() => {});
     const done = session;
