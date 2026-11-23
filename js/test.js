@@ -286,20 +286,43 @@ S.test = (() => {
     return o;
   }
 
+  /* While a corner marker has been covered for more than 3 s the student's clock stops,
+     and it starts again as soon as all 4 markers can be seen. Returns el minus the stopped time. */
+  function markerClock() {
+    let frozen = 0, last = null;
+    return el => {
+      const dt = last == null ? 0 : el - last;
+      last = el;
+      const hid = S.vision.hiddenSince;
+      const stopped = hid != null && now() - hid > 3000;
+      if (stopped) frozen += dt;
+      if (page && page.stage) page.stage.classList.toggle('timer-stopped', stopped);
+      return el - frozen;
+    };
+  }
+
+  /* A corner marker covered for 3 s: ask the student to uncover it (says nothing about where pieces go), every 12 s */
+  let markerNagAt = null;
+  function markerReminder() {
+    const hid = S.vision.hiddenSince;
+    if (hid == null || now() - hid <= 3000) return;
+    if (markerNagAt != null && now() - markerNagAt <= 12000 && markerNagAt >= hid) return;
+    markerNagAt = now();
+    S.ui.toast(S.TEXT.markers_covered);
+    S.audio.say(S.TEXT.markers_covered);
+  }
+
   async function waitPlacement(target, ms, since, total) {
     const thr = S.settings.get().confThreshold;
-    let warned = false, nagged = false, handSince = null, firstHand = null, markerNagAt = null;
+    let warned = false, nagged = false, handSince = null, firstHand = null;
     const start = observe();
     const base = Object.fromEntries(S.ORGANS.map(z => [z, start.zones[z] ? start.zones[z].cls : 'empty']));
-    const r = await S.run.until(el => {
+    const clock = markerClock();
+    const r = await S.run.until(elRaw => {
+      const el = clock(elRaw);
+      if (el >= ms) return { timeout: true };
       const o = observe();
-      /* A corner marker covered for 3 s: ask the student to uncover it (says nothing about where pieces go) */
-      const hidSince = S.vision.hiddenSince;
-      if (hidSince != null && now() - hidSince > 3000 && (markerNagAt == null || now() - markerNagAt > 12000)) {
-        markerNagAt = now();
-        S.ui.toast(S.TEXT.markers_covered);
-        S.audio.say(S.TEXT.markers_covered);
-      }
+      markerReminder();
       const remaining = ms - el;
       S.ui.setTimer(page, remaining, total || ms);
       if (!warned && remaining <= 10000 && ms >= 20000) { warned = true; S.audio.cue('p07_10s_left'); }
@@ -309,8 +332,9 @@ S.test = (() => {
       if (o.hand || o.stableMs < T.stableMs || o.changedAt <= since) return null;
       const j = S.judge(target, o.zones, thr, { base, long: o.stableMs >= T.letGoMs });
       return j ? { ...j, handClearAt: o.handClearAt, firstHand } : null;
-    }, ms);
-    if (!r.ok) return { timeout: true };
+    }, null);
+    if (!r.ok || r.value.timeout) { if (page && page.stage) page.stage.classList.remove('timer-stopped'); return { timeout: true }; }
+    if (page && page.stage) page.stage.classList.remove('timer-stopped');
     return { ...r.value, verdictAt: now() };
   }
 
@@ -404,17 +428,22 @@ S.test = (() => {
     S.vision.onBuild();
     let warned = false;
     const auto = S.vision.kind === 'sim' && S.settings.get().simAutoStudent;
-    const r = await S.run.until(el => {
+    const clock = markerClock();
+    const r = await S.run.until(elRaw => {
+      const el = clock(elRaw);
+      if (el >= T.buildMs) return 'timeout';
       const rem = T.buildMs - el;
       S.ui.setTimer(page, rem, T.buildMs);
       if (!warned && rem <= 30000) { warned = true; S.audio.cue('p09_30s_left'); }
       if (doneTap) return true;
       if (auto) { const o = observe(); if (!o.hand && o.stableMs > 2000 && S.ORGANS.every(z => o.zones[z].cls !== 'empty')) return true; }
+      markerReminder();
       return null;
-    }, T.buildMs);
+    }, null);
     doneBtn.remove();
     S.ui.setTimer(page, null);
-    if (!r.ok) { build.timeout = true; page.setText(S.TEXT.p09_time_up); await playMain('p09_time_up'); }
+    page.stage.classList.remove('timer-stopped');
+    if (r.value === 'timeout') { build.timeout = true; page.setText(S.TEXT.p09_time_up); await playMain('p09_time_up'); }
     const markStart = now();
     await S.run.until(() => { const o = observe(); return !o.hand && o.stableMs >= T.stableMs; }, 5000);
     const o = observe();

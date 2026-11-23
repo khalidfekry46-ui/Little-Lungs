@@ -637,3 +637,7 @@ select.inline { width: auto; min-height: 44px; }
 .cam-preview.bad canvas { border-color: #d93025; }
 .cam-preview figcaption { font-size: 1rem; font-weight: 600; color: #1f6f3f; }
 .cam-preview.bad figcaption { color: #b3261e; }
+
+/* Clock stopped while a corner marker is covered */
+.timer-stopped .timebar i { background: #9aa0a6 !important; }
+.timer-stopped .clock::after { content: ' paused'; font-size: .8em; color: #b3261e; }
