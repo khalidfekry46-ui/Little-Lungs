@@ -56,6 +56,8 @@ S.flatten = function (s) {
   const dev = s.device || {};
   const base = { session_id: s.id, device_code: dev.code };
   const simulated = S.isSimulated(s);
+  /* Placements come only from the camera AI, so they are real whenever the camera AI was live, even if the Pico was simulated */
+  const simCam = !!(s.demo || (s.mode && s.mode.vision === 'sim'));
   const roster = [{ session_id: s.id, student_code: s.student.code, name: s.student.name, student_id: s.student.student_id, grade: s.student.grade, class: s.student.class }];
   const servo = (s.t2.servo || []).filter(Number.isFinite);
   const sessions = [{
@@ -75,7 +77,7 @@ S.flatten = function (s) {
   const placements = [];
   (s.t1.items || []).forEach(it => {
     it.attempts.forEach(at => placements.push({
-      ...base, simulated, part: '1A', item_no: it.n, organ: it.organ, level: it.level, attempt: at.a,
+      ...base, simulated: simCam, part: '1A', item_no: it.n, organ: it.organ, level: it.level, attempt: at.a,
       ai_verdict: at.ai_verdict, ai_error: at.error || '', ai_zone: at.seenZone || '', ai_class: at.seenCls || '', ai_conf: at.conf != null ? +at.conf.toFixed(3) : null,
       time_to_place_ms: at.place_ms != null ? Math.round(at.place_ms) : null, response_ms: at.response_ms != null ? Math.round(at.response_ms) : null,
       timeout: !!at.timeout, hint_used: at.a === 2, item_result: it.result, item_points: it.points,
@@ -84,7 +86,7 @@ S.flatten = function (s) {
   });
   if (s.t1.build && s.t1.build.pieces) {
     s.t1.build.pieces.forEach((p, i) => placements.push({
-      ...base, simulated, part: '1B', item_no: i + 1, organ: p.organ, level: '', attempt: 1,
+      ...base, simulated: simCam, part: '1B', item_no: i + 1, organ: p.organ, level: '', attempt: 1,
       ai_verdict: p.ai_verdict, ai_error: '', ai_zone: p.organ, ai_class: p.seenCls || '', ai_conf: p.conf != null ? +p.conf.toFixed(3) : null,
       time_to_place_ms: null, response_ms: s.t1.build.response_ms != null ? Math.round(s.t1.build.response_ms) : null,
       timeout: !!s.t1.build.timeout, hint_used: false, item_result: p.ai_verdict, item_points: p.ai_verdict === 'correct' ? 1 : 0,
