@@ -71,7 +71,8 @@ S.admin = (() => {
       S.art.verity('big'),
       h('h1', null, 'Little Lungs'),
       h('p', null, 'Smart Anatomy Test. Anatomy assembly and breathing for G8 to G12 students.'),
-      S.ui.button('Unlock with operator PIN', go)));
+      S.ui.button('Unlock with operator PIN', go),
+      h('p', { class: 'muted small' }, `Build ${S.BUILD}`)));
   }
 
   /* ---------- Student home ---------- */
@@ -663,7 +664,18 @@ S.admin = (() => {
         }),
         h('button', { class: 'btn', type: 'button', onclick: async () => { if (await S.ui.askPin('Enter the current PIN')) await S.ui.setupPin(false); } }, 'Change PIN'),
         msg),
-      h('p', { class: 'muted small' }, `App version ${S.APP_VERSION}.`));
+      h('section', null, h('h2', null, 'App updates'),
+        h('p', { class: 'muted' }, `This tablet runs build ${S.BUILD}. If the website has a newer build and this one does not change after reloading, tap below. Sessions, photos, passwords and settings stay on the tablet.`),
+        h('button', { class: 'btn', type: 'button', onclick: async () => {
+          if (!(await S.ui.confirmBox('Get the latest version?', 'The offline copy of the app is removed and downloaded again. Saved data is not touched. Needs internet.', 'Update now', 'Cancel'))) return;
+          try {
+            const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
+            await Promise.all(regs.map(r => r.unregister()));
+            if (window.caches) await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+          } catch (e) { /* reload anyway */ }
+          location.reload();
+        } }, 'Get the latest version')),
+      h('p', { class: 'muted small' }, `App version ${S.APP_VERSION}, build ${S.BUILD}.`));
     frame('Settings', content, 'settings');
   }
 
