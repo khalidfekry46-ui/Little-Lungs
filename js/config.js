@@ -3,7 +3,7 @@
 window.S = window.S || {};
 
 S.APP_VERSION = '1.2.0';
-S.BUILD = '1.9.0';   /* keep equal to VERSION in sw.js */
+S.BUILD = '1.9.1';   /* keep equal to VERSION in sw.js */
 S.APP_NAME = 'Little Lungs: Smart Anatomy Test';
 S.CONTACT_EMAIL = 'Khalidfekry46@gmail.com';
 

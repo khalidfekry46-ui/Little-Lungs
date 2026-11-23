@@ -246,9 +246,19 @@ class VisionLive {
       let md = 0;
       for (let i = 0; i < g.length; i++) md += g[i] - this.prev[i];
       md /= g.length; /* whole-picture brightness shift (camera exposure), not movement */
-      let moved = 0;
-      for (let i = 0; i < g.length; i++) if (Math.abs(g[i] - this.prev[i] - md) > 25) moved++;
-      if (moved / g.length > 0.004) this.lastChange = now;
+      /* Compare 2 cm squares, not single pixels: camera noise and the tiny wobble of the marker
+         corners change single pixels along every edge, even when nothing moves. A square only
+         counts as changed when its average brightness changes by more than 12 of 255. */
+      const W = sb.width, H = sb.height, C = 6;
+      let cells = 0, busy = 0;
+      for (let y = 0; y + C <= H; y += C) for (let x = 0; x + C <= W; x += C) {
+        let a = 0;
+        for (let yy = y; yy < y + C; yy++) for (let xx = x; xx < x + C; xx++) { const j = yy * W + xx; a += g[j] - this.prev[j] - md; }
+        cells++;
+        if (Math.abs(a / (C * C)) > 12) busy++;
+      }
+      this.movedPct = cells ? 100 * busy / cells : 0;
+      if (busy / cells > 0.015) this.lastChange = now;
     } else this.lastChange = now;
     this.prev = g;
     this.setHand(this.aiHand);
