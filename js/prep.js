@@ -59,7 +59,7 @@ S.prep = (() => {
   async function run(p) {
     if (S.test.session) { S.ui.toast('Finish the current test first.'); return; }
     const st = S.settings.get();
-    S.run.reset(st.visionMode === 'sim' || st.picoMode === 'sim' ? Number(st.simSpeed) || 1 : 1);
+    S.run.reset(st.visionMode === 'sim' && st.picoMode === 'sim' ? Number(st.simSpeed) || 1 : 1); /* a live part always runs in real time */
     const article = h('div'), slot = h('div');
     const page = S.ui.studentPage({ code: 'Prep', progress: `Prep: ${S.reading.LEVEL_NAME[p.level]}`, text: 'Read the passage, then answer the five questions.', extraLeft: article, visual: slot });
     page.stage.classList.add('reading');

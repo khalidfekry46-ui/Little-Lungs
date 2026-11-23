@@ -243,7 +243,7 @@ S.admin = (() => {
     if (o.ready) {
       const busy = S.ORGANS.filter(z => o.zones[z] && o.zones[z].cls !== 'empty');
       add('empty', 'Board empty', busy.length ? 'fail' : 'pass', busy.length ? `Pieces found on: ${busy.map(z => S.ORGAN_NAME[z]).join(', ')}` : 'All 5 zones empty');
-    } else add('empty', 'Board empty', 'fail', 'The camera AI is not ready');
+    } else add('empty', 'Board empty', 'fail', 'Not checked: ' + (S.vision.notReadyReason ? S.vision.notReadyReason() : 'the camera AI is not ready'));
 
     /* Pico */
     const pst = S.settings.get();

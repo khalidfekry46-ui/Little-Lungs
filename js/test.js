@@ -63,7 +63,7 @@ S.test = (() => {
   /* ---------- Session start and end ---------- */
   async function start(stationResult) {
     const st = S.settings.get();
-    S.run.reset(st.visionMode === 'sim' || st.picoMode === 'sim' ? Number(st.simSpeed) || 1 : 1);
+    S.run.reset(st.visionMode === 'sim' && st.picoMode === 'sim' ? Number(st.simSpeed) || 1 : 1); /* a live part always runs in real time */
     abortPromise = new Promise((_, rej) => { abortReject = rej; });
     abortPromise.catch(() => {});
     session = S.newSession();

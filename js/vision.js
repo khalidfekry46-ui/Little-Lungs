@@ -45,6 +45,16 @@ class VisionSim {
   async start() { return true; }
   async selfTest() { return { ok: true, detail: 'Simulated model' }; }
   async boardView() { return { markers: 4, tilt: 'ok', light: 'ok' }; }
+  /* Why there is no AI reading yet, in words for the operator */
+  notReadyReason() {
+    if (this.found !== 4) return `Only ${this.found || 0} of 4 corner markers are visible, so the AI cannot look at the zones.`;
+    if (!S.zoneAI.model) return 'The AI model has not finished loading.';
+    if (this.aiError) return 'The AI stopped with an error: ' + this.aiError;
+    if (this.aiBusy) return 'The AI is still looking at the board for the first time. Tap Run the check again in a few seconds.';
+    if (this.aiDiscarded) return `The board kept changing while the AI looked (${this.aiDiscarded} times, ${Math.round(this.aiMs || 0)} ms per look). Keep hands, shadows and the tablet still, then run the check again.`;
+    if (S.run.now() - this.lastChange < this.settleMs) return 'The camera keeps seeing movement on the board (people, shadows, flickering light or a wobbling stand). Keep it still, then run the check again.';
+    return 'The camera AI has not looked at the board yet.';
+  }
   read() {
     const now = S.run.now();
     return {
@@ -250,8 +260,11 @@ class VisionLive {
       const crops = S.ORGANS.map(o => S.aruco.zoneCrop(board, S.BOARD.zones[o], 224, layout));
       const frameAt = now, changeAt = this.lastChange;
       this.aiBusy = true;
+      const aiT0 = performance.now();
       S.zoneAI.predictMany(crops).then(gs => {
-        if (this.lastChange !== changeAt) return; /* the board moved while the AI was looking: throw it away */
+        this.aiMs = performance.now() - aiT0;
+        this.aiError = null;
+        if (this.lastChange !== changeAt) { this.aiDiscarded = (this.aiDiscarded || 0) + 1; return; } /* the board moved while the AI was looking: throw it away */
         const zones = {};
         let hand = false;
         S.ORGANS.forEach((o, i) => {
@@ -264,7 +277,7 @@ class VisionLive {
         this.aiHand = hand;
         this.aiFrameAt = frameAt;
         this.setHand(hand || this.markersHidden);
-      }).catch(e => console.warn('[vision] AI', e)).finally(() => { this.aiBusy = false; });
+      }).catch(e => { this.aiError = (e && e.message) || String(e); console.warn('[vision] AI', e); }).finally(() => { this.aiBusy = false; });
     }
   }
   async selfTest() {
@@ -278,10 +291,10 @@ class VisionLive {
       return { ok: true, detail: `${m.backbone === 'mobilenetv2' ? 'MobileNet AI' : 'Small fallback AI'} loaded (${ms} ms per zone)` };
     } catch (e) { return { ok: false, detail: 'The AI model did not load: ' + (e && e.message) }; }
   }
-  /* Waits up to 8 s for the markers and a first AI reading */
+  /* Waits up to 20 s for the markers and a first AI reading (the first reading is slow while the AI warms up) */
   async boardView() {
     const t0 = performance.now();
-    while (performance.now() - t0 < 8000 && !(this.found === 4 && this.aiFrameAt >= 0)) await S.util.realSleep(200);
+    while (performance.now() - t0 < 20000 && !(this.found === 4 && this.aiFrameAt >= 0) && !this.aiError) await S.util.realSleep(200);
     const L = this.light;
     const light = L == null ? 'unknown' : L >= 70 && L <= 210 ? 'ok' : L >= 45 && L <= 230 ? 'borderline' : 'bad';
     return { markers: this.found, tilt: this.found === 4 ? 'ok' : 'unknown', light,
