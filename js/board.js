@@ -134,7 +134,7 @@ S.boardCheck = (() => {
     } }, 'Save straightened board');
 
     const aiNote = h('p', { class: 'muted small' }, 'Loading the AI...');
-    S.zoneAI.load().then(m => { aiNote.textContent = `${m.backbone === 'mobilenetv2' ? 'MobileNet AI' : 'Small fallback AI' + (m.fallbackReason ? ` (MobileNet could not start: ${m.fallbackReason})` : '')}, model from ${m.version}, trained on session${(m.info.trained_on || []).length > 1 ? 's' : ''} ${(m.info.trained_on || []).join(', ')} (${m.info.pictures} pictures). Early model: expect mistakes until more sessions are in.`; }).catch(() => { aiNote.textContent = 'No AI model yet.'; });
+    S.zoneAI.load().then(m => { aiNote.textContent = `${m.backbone === 'mobilenetv2' ? 'MobileNet AI' : 'Small fallback AI' + (m.fallbackReason ? ` (MobileNet could not start: ${m.fallbackReason})` : '')}, model from ${m.version}, trained on sessions ${(m.info.trained_on || []).filter(s => s < 90).join(', ')}${(m.info.trained_on || []).some(s => s >= 90) ? ' and the hand videos' : ''} (${Number(m.info.pictures).toLocaleString('en-US')} pictures).`; }).catch(() => { aiNote.textContent = 'No AI model yet.'; });
     return h('div', { class: 'boardcheck' },
       h('p', null, 'Hold the tablet where it will sit in the station. Every marker found turns green. The straightened board shows the 5 zones; each square underneath is what the AI will look at.'),
       h('div', { class: 'row wrap' }, startBtn, stopBtn, fileBtn, saveBtn, file),
