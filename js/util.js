@@ -235,6 +235,9 @@ S.settings = (() => {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { saved = {}; }
     cache = Object.assign({}, S.DEFAULT_SETTINGS, saved);
+    /* 1.8.5: the old default 0.6 becomes 0.8 (the live AI asks the operator when it is between 20% and 80% sure) */
+    if (!cache.conf08 && cache.confThreshold === 0.6) cache.confThreshold = 0.8;
+    cache.conf08 = true;
     return cache;
   }
   function save(patch) {

@@ -45,3 +45,9 @@ S02-17,heart,heart,upside_down,upside_down,flipped
 S02-28,rlung,llung,flipped,flipped,left_lung
 S02-38,heart,heart,upside_down,upside_down,partial
 S01-20,llung,llung,,left_lung,partial
+S04-31,heart,windpipe,partial,partial,trachea
+S04-08,llung,llung,upside_down,upside_down,flipped
+S04-34,heart,heart,flipped,flipped,heart
+S04-29,heart,heart,flipped,flipped,empty
+S04-33,heart,windpipe,partial,partial,trachea
+S04-33,windpipe,two,,partial,upside_down

@@ -10,6 +10,9 @@ S.judge = function (target, zones, thr) {
   const z = zones[target] || { cls: 'empty', conf: 1 };
   /* A piece half outside its box, or a hand: not finished yet, keep waiting */
   if (z.cls === 'partial' || z.cls === 'hand') return null;
+  /* Live camera: pOwn = how sure the AI is that the target piece is in its zone, the right way up.
+     Sure it is (>= thr): judge as usual. Sure it is not (<= 1 - thr): judge as usual. In between: ask the operator. */
+  if (z.pOwn != null && z.pOwn > 1 - thr && z.pOwn < thr) return { verdict: 'cant_verify', error: null, seenZone: target, seenCls: z.cls, conf: z.conf };
   const elsewhere = S.ORGANS.find(o => o !== target && zones[o] && (zones[o].cls === target || zones[o].cls === 'rot:' + target));
   if (z.cls === target && !elsewhere) {
     return { verdict: z.conf >= thr ? 'correct' : 'cant_verify', error: null, seenZone: target, seenCls: z.cls, conf: z.conf };
@@ -147,6 +150,7 @@ class VisionSim {
    The AI only names the zones once the board has been still for a moment, so a moving hand or sleeve is never
    judged. If the AI sees a hand resting on a zone, or a marker gets covered, the observation says hand = true:
    the test then waits and asks the student to move their hand away, instead of marking anything wrong. */
+const OWN_CAT = { rlung: 'right_lung', llung: 'left_lung', heart: 'heart', windpipe: 'trachea', diaphragm: 'diaphragm' };
 const AI_TO_CLS = { right_lung: 'rlung', left_lung: 'llung', heart: 'heart', trachea: 'windpipe', diaphragm: 'diaphragm', empty: 'empty', partial: 'partial', hand: 'hand' };
 class VisionLive {
   constructor() {
@@ -253,7 +257,7 @@ class VisionLive {
         S.ORGANS.forEach((o, i) => {
           const r = gs[i];
           const cls = r.name === 'flipped' || r.name === 'upside_down' ? 'rot:' + o : AI_TO_CLS[r.name] || 'empty';
-          zones[o] = { cls, conf: r.conf, ai: r.name };
+          zones[o] = { cls, conf: r.conf, ai: r.name, pOwn: r.probs[OWN_CAT[o]] || 0 };
           if (r.name === 'hand' && r.conf >= 0.5) hand = true;
         });
         this.zones = zones;

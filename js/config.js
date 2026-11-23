@@ -186,7 +186,7 @@ S.DEFAULT_SETTINGS = {
   visionMode: 'sim',
   syncUrl: '',
   syncKey: '',
-  confThreshold: 0.6,
+  confThreshold: 0.8,
   hrSwingThreshold: 2,
   mirrorDuringTrials: false,
   simAutoStudent: true,
