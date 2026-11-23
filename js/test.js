@@ -68,6 +68,7 @@ S.test = (() => {
     abortPromise.catch(() => {});
     session = S.newSession();
     session.station = stationResult;
+    if (stationResult && stationResult.practice) { session.review.valid = false; session.review.exclude_reason = 'Practice: started with failed station checks (' + stationResult.failed + ')'; }
     log('session_start');
     await save();
     S.sync.live.start(() => session);

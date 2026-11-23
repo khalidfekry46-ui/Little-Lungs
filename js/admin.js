@@ -278,7 +278,12 @@ S.admin = (() => {
     actions.replaceChildren(
       h('button', { class: 'btn', type: 'button', onclick: () => home() }, 'Back'),
       h('button', { class: 'btn', type: 'button', onclick: stationCheck }, 'Run the check again'),
-      h('button', { class: 'btn primary', type: 'button', disabled: status === 'red', onclick: () => S.test.start(result) }, 'Start the session'));
+      h('button', { class: 'btn primary', type: 'button', disabled: status === 'red', onclick: () => S.test.start(result) }, 'Start the session'),
+      status === 'red' ? h('button', { class: 'btn', type: 'button', onclick: async () => {
+        const failed = checks.filter(c => c.result === 'fail').map(c => c.label).join(', ');
+        if (!(await S.ui.confirmBox('Start a practice session?', `Failed: ${failed}. The session runs normally but is saved as not valid, so it is left out of the statistics.`, 'Start practice', 'Cancel'))) return;
+        S.test.start(Object.assign({}, result, { practice: true, failed }));
+      } }, 'Start anyway (practice)') : null);
     try { localStorage.setItem('anatomy-station-last-check', JSON.stringify(result)); } catch (e) { /* ignore */ }
   }
 
